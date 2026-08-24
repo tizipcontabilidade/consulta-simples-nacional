@@ -159,6 +159,20 @@ Cria `.venv` e instala as dependências. Depois:
 python app.py
 ```
 
+### Testes
+
+```bash
+pip install -r requirements-dev.txt
+```
+
+```bash
+python -m pytest -q
+```
+
+94 testes que não tocam o portal: o navegador é dublado e as páginas vêm de
+`tests/fixturas.py`. O plano completo, incluindo os testes manuais de instalador
+e agendamento, está em [TESTES.md](TESTES.md).
+
 ### Gerar o executável e o instalador
 
 ```powershell
@@ -221,3 +235,8 @@ templates/  static/         telas
   adianta guardar a URL `...ConsultarCnpj?vc=...`; por isso o comprovante é
   salvo em HTML.
 - Um lote por vez: a consulta depende de uma única janela de navegador.
+
+## Licença
+
+[MIT](LICENSE) — uso, cópia, modificação e distribuição livres, mantendo o aviso
+de copyright. O software é fornecido "como está", sem garantias.

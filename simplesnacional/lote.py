@@ -151,16 +151,16 @@ def executar(
         if ao_progredir:
             ao_progredir(execucao)
 
-    sessao = Sessao(visivel=visivel, ao_avisar=avisar)
-    try:
-        sessao.abrir()
-    except Exception as exc:  # navegador ausente, perfil travado, etc.
-        execucao.erro_fatal = f"nao foi possivel abrir o navegador: {exc}"
-        execucao.concluido = True
-        execucao.fim = datetime.now()
-        if ao_progredir:
-            ao_progredir(execucao)
-        return execucao
+    # O navegador so e aberto quando ha de fato um CNPJ para consultar: um lote
+    # so de CNPJs invalidos nao deve abrir janela nenhuma.
+    sessao: Optional[Sessao] = None
+
+    def obter_sessao() -> Sessao:
+        nonlocal sessao
+        if sessao is None:
+            sessao = Sessao(visivel=visivel, ao_avisar=avisar)
+            sessao.abrir()
+        return sessao
 
     try:
         for posicao, cnpj in enumerate(lista, start=1):
@@ -179,7 +179,12 @@ def executar(
                     erro="CNPJ invalido (digito verificador nao confere) - nao foi consultado",
                 )
             else:
-                resposta = sessao.consultar(cnpj)
+                try:
+                    ativa = obter_sessao()
+                except Exception as exc:  # navegador ausente, perfil travado, etc.
+                    execucao.erro_fatal = f"nao foi possivel abrir o navegador: {exc}"
+                    break
+                resposta = ativa.consultar(cnpj)
                 execucao.aguardando_captcha = False
                 item.html = resposta.html
                 item.consulta = analisar(resposta.html, cnpj)
@@ -209,16 +214,20 @@ def executar(
             if posicao < len(lista) and not execucao.cancelado:
                 pausa_entre_consultas()
     finally:
-        sessao.fechar()
+        if sessao is not None:
+            sessao.fechar()
 
     if usar_historico and execucao.itens:
         historico.registrar([i.como_dicionario() for i in execucao.itens])
 
     execucao.concluido = True
     execucao.fim = datetime.now()
-    execucao.mensagem = (
-        "Lote cancelado pelo operador." if execucao.cancelado else "Consulta concluida."
-    )
+    if execucao.erro_fatal:
+        execucao.mensagem = f"Lote interrompido: {execucao.erro_fatal}"
+    elif execucao.cancelado:
+        execucao.mensagem = "Lote cancelado pelo operador."
+    else:
+        execucao.mensagem = "Consulta concluida."
     if ao_progredir:
         ao_progredir(execucao)
     return execucao

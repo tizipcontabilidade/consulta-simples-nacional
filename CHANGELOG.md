@@ -2,6 +2,22 @@
 
 O formato segue [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/).
 
+## [1.0.1] — 2026-08-24
+
+### Adicionado
+
+- Licença MIT, exibida também durante a instalação.
+- Suíte de testes automatizados (`tests/`, 94 casos): smoke, sanity, regressão e
+  aceitação de sistema, de usuário e operacional.
+
+### Corrigido
+
+- Lote formado apenas por CNPJs inválidos não abre mais o navegador à toa; a
+  sessão passa a ser aberta sob demanda, no primeiro CNPJ que realmente vai
+  ao portal.
+- Falha ao abrir o navegador no meio do lote agora encerra com mensagem
+  explicativa em vez de mensagem de conclusão normal.
+
 ## [1.0.0] — 2026-08-24
 
 Primeira versão distribuível.

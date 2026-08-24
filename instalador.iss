@@ -3,7 +3,7 @@
 
 #define Nome "Consulta Simples Nacional"
 #ifndef Versao
-  #define Versao "1.0.0"
+  #define Versao "1.0.1"
 #endif
 #define Publicador "Zip Contabilidade"
 #define Executavel "ConsultaSimplesNacional.exe"
@@ -28,7 +28,7 @@ PrivilegesRequiredOverridesAllowed=dialog
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 UninstallDisplayIcon={app}\{#Executavel}
-LicenseFile=
+LicenseFile=LICENSE
 InfoBeforeFile=
 
 [Languages]
