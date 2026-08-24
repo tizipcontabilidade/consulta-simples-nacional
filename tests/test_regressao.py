@@ -210,3 +210,22 @@ def test_r7_lote_misto_abre_uma_sessao_so(pastas_temporarias, sessao_falsa):
     assert sessao_falsa[0].consultados == [fixturas.CNPJ_EM_DIA, fixturas.CNPJ_COM_EVENTOS]
     assert sessao_falsa[0].fechada is True
     assert len(execucao.itens) == 3
+
+
+# --------------------------------------------------------------------- R8
+def test_r8_cnpj_com_zero_a_esquerda_comido_pela_planilha():
+    """Planilha que guarda CNPJ como numero perde o zero a esquerda e entrega 13
+    digitos. Sem tratamento, o cliente sumia do lote em silencio - a pior falha
+    possivel aqui."""
+    assert extrair_cnpjs("1234567000195") == ["01234567000195"]
+    assert extrair_cnpjs("01234567000195") == ["01234567000195"]
+
+
+def test_r8_numero_de_13_digitos_sem_sentido_e_ignorado():
+    """O zero a esquerda so entra se os digitos verificadores fecharem."""
+    assert extrair_cnpjs("1234567890123") == []
+
+
+def test_r8_nao_confunde_com_cnpj_completo_ao_lado():
+    texto = "1234567000195 e 98.765.432/0001-98"
+    assert extrair_cnpjs(texto) == ["01234567000195", "98765432000198"]

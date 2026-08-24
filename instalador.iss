@@ -3,7 +3,7 @@
 
 #define Nome "Consulta Simples Nacional"
 #ifndef Versao
-  #define Versao "1.0.1"
+  #define Versao "1.0.2"
 #endif
 #define Publicador "Zip Contabilidade"
 #define Executavel "ConsultaSimplesNacional.exe"

@@ -2,6 +2,20 @@
 
 O formato segue [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/).
 
+## [1.0.2] — 2026-08-24
+
+### Corrigido
+
+- **CNPJ com zero à esquerda não é mais descartado em silêncio.** Planilha que
+  guarda o CNPJ como número entrega 13 dígitos; o extrator ignorava esses casos e
+  o cliente simplesmente não era consultado, sem aviso. Agora o zero é
+  reconstituído, mas o CNPJ só entra no lote se os dígitos verificadores fecharem.
+
+### Testes
+
+- Primeiro lote de volume contra o portal real: 105 CNPJs, sem nenhuma falha e
+  sem bloqueio de captcha. Resultado registrado em `TESTES.md`.
+
 ## [1.0.1] — 2026-08-24
 
 ### Adicionado

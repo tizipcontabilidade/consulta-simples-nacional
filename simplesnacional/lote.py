@@ -14,13 +14,26 @@ from .parser import Consulta, analisar, formatar_cnpj, somente_digitos
 from .scraper import Sessao, pausa_entre_consultas
 
 
+# CNPJ completo (com ou sem pontuacao) ou o caso de 13 digitos, que aparece
+# quando a planilha guardou o CNPJ como numero e comeu o zero a esquerda.
+_PADRAO_CNPJ = r"(?<!\d)(?:\d{2}\.?\d{3}\.?\d{3}/?\d{4}-?\d{2}|\d{13})(?!\d)"
+
+
 def extrair_cnpjs(texto: str) -> list:
-    """Extrai CNPJs de texto livre (colado, CSV, uma por linha...), sem repetir."""
-    padrao = r"(?<!\d)\d{2}\.?\d{3}\.?\d{3}/?\d{4}-?\d{2}(?!\d)"
-    encontrados = re.findall(padrao, texto or "")
+    """Extrai CNPJs de texto livre (colado, CSV, uma por linha...), sem repetir.
+
+    Um numero de 13 digitos so entra se, com o zero a esquerda de volta, os
+    digitos verificadores fecharem - o preenchimento e um palpite, e o palpite
+    precisa de prova.
+    """
     limpos = []
-    for bruto in encontrados:
+    for bruto in re.findall(_PADRAO_CNPJ, texto or ""):
         digitos = somente_digitos(bruto)
+        if len(digitos) == 13:
+            candidato = digitos.zfill(14)
+            if not validar_cnpj(candidato):
+                continue
+            digitos = candidato
         if len(digitos) == 14 and digitos not in limpos:
             limpos.append(digitos)
     return limpos

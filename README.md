@@ -169,7 +169,7 @@ pip install -r requirements-dev.txt
 python -m pytest -q
 ```
 
-94 testes que não tocam o portal: o navegador é dublado e as páginas vêm de
+97 testes que não tocam o portal: o navegador é dublado e as páginas vêm de
 `tests/fixturas.py`. O plano completo, incluindo os testes manuais de instalador
 e agendamento, está em [TESTES.md](TESTES.md).
 
