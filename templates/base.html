@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block titulo %}Consulta Simples Nacional{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='estilo.css') }}">
+</head>
+<body>
+  <header>
+    <a class="marca" href="{{ url_for('inicio') }}">
+      <span class="ponto"></span> Consulta Simples Nacional
+    </a>
+    <span class="sub">Optantes &middot; desenquadramento &middot; eventos futuros</span>
+    {% block encerrar %}
+    <form class="encerrar" method="post" action="{{ url_for('encerrar') }}">
+      <button type="submit" title="Fecha o sistema. Fechar a aba tambem encerra.">Encerrar</button>
+    </form>
+    {% endblock %}
+  </header>
+
+  <main>
+    {% block conteudo %}{% endblock %}
+  </main>
+
+  <footer>
+    Dados obtidos do portal oficial do Simples Nacional (Receita Federal) no momento da consulta.
+    O sistema roda em segundo plano: fechar esta aba (ou clicar em <strong>Encerrar</strong>)
+    finaliza tudo. Um lote em andamento sempre termina antes.
+  </footer>
+
+  {% block sinal %}
+  <script>
+    // Sinal de vida: enquanto esta tela estiver aberta, o sistema continua no ar.
+    // Fechou a aba (ou o navegador), o servidor se encerra sozinho em segundos -
+    // exceto se houver um lote em andamento, que sempre termina.
+    const avisarQueEstouAqui = () =>
+      fetch("{{ url_for('sinal') }}", { method: "POST", keepalive: true }).catch(() => {});
+    avisarQueEstouAqui();
+    setInterval(avisarQueEstouAqui, 5000);
+  </script>
+  {% endblock %}
+</body>
+</html>

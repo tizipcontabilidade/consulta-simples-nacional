@@ -1,0 +1,271 @@
+"""Interface web local para a consulta em lote do Simples Nacional.
+
+Suba com:  python app.py     e abra http://127.0.0.1:5000
+"""
+from __future__ import annotations
+
+import io
+import os
+import socket
+import threading
+import time
+import webbrowser
+from datetime import datetime
+
+from flask import (
+    Flask,
+    abort,
+    jsonify,
+    redirect,
+    render_template,
+    request,
+    send_file,
+    send_from_directory,
+    url_for,
+)
+
+from simplesnacional import config, exportar, historico, lote
+from simplesnacional.analise import EM_DIA, ORDEM, ROTULOS
+
+app = Flask(
+    __name__,
+    template_folder=str(config.RAIZ_CODIGO / "templates"),
+    static_folder=str(config.RAIZ_CODIGO / "static"),
+)
+
+# Um lote por vez: a consulta depende de uma janela de navegador unica.
+_atual: lote.Execucao | None = None
+_thread: threading.Thread | None = None
+_trava = threading.Lock()
+
+# O sistema roda sem janela de console: quem manda encerrar e a propria
+# interface. A pagina envia um sinal de vida a cada poucos segundos; se a aba
+# for fechada (ou o navegador todo), o sinal para e o servidor se encerra
+# sozinho - mas nunca no meio de um lote.
+_ultimo_sinal = time.monotonic()
+_encerrando = False
+INTERVALO_SINAL = 5                            # ritmo da verificacao
+TOLERANCIA_SINAL = config.TOLERANCIA_SINAL     # silencio maior = ninguem olhando
+
+
+def _ha_lote_ativo() -> bool:
+    return _thread is not None and _thread.is_alive()
+
+
+def _encerrar_processo(atraso: float = 0.6) -> None:
+    """Derruba o servidor local. os._exit e o caminho confiavel aqui:
+    o servidor de desenvolvimento do Flask nao tem parada limpa por fora
+    de uma requisicao, e nao ha estado em memoria para preservar."""
+    global _encerrando
+    _encerrando = True
+    threading.Timer(atraso, lambda: os._exit(0)).start()
+
+
+def _vigiar_interface() -> None:
+    """Encerra o sistema quando ninguem mais tem a interface aberta."""
+    while not _encerrando:
+        time.sleep(INTERVALO_SINAL)
+        if _ha_lote_ativo():
+            continue  # lote rodando: segura o encerramento ate terminar
+        if time.monotonic() - _ultimo_sinal > TOLERANCIA_SINAL:
+            _encerrar_processo(0.1)
+            return
+
+
+def _porta_ocupada(porta: int) -> bool:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as teste:
+        teste.settimeout(0.4)
+        return teste.connect_ex(("127.0.0.1", porta)) == 0
+
+
+# --------------------------------------------------------------------- leitura
+def _cnpjs_de_planilha(arquivo) -> list:
+    """Le CNPJs de um .xlsx enviado (qualquer coluna, qualquer aba)."""
+    from openpyxl import load_workbook
+
+    planilha = load_workbook(io.BytesIO(arquivo.read()), read_only=True, data_only=True)
+    textos = []
+    for aba in planilha.worksheets:
+        for linha in aba.iter_rows(values_only=True):
+            for celula in linha:
+                if celula is not None:
+                    textos.append(str(celula))
+    return lote.extrair_cnpjs("\n".join(textos))
+
+
+def _cnpjs_do_pedido() -> list:
+    encontrados = lote.extrair_cnpjs(request.form.get("cnpjs", ""))
+
+    arquivo = request.files.get("arquivo")
+    if arquivo and arquivo.filename:
+        nome = arquivo.filename.lower()
+        if nome.endswith((".xlsx", ".xlsm")):
+            encontrados += _cnpjs_de_planilha(arquivo)
+        else:
+            bruto = arquivo.read()
+            for codificacao in ("utf-8-sig", "latin-1"):
+                try:
+                    encontrados += lote.extrair_cnpjs(bruto.decode(codificacao))
+                    break
+                except UnicodeDecodeError:
+                    continue
+
+    unicos = []
+    for cnpj in encontrados:
+        if cnpj not in unicos:
+            unicos.append(cnpj)
+    return unicos
+
+
+# ---------------------------------------------------------------------- rotas
+@app.get("/")
+def inicio():
+    return render_template("index.html", execucao=_atual)
+
+
+@app.post("/consultar")
+def consultar():
+    global _atual, _thread
+
+    cnpjs = _cnpjs_do_pedido()
+    if not cnpjs:
+        return render_template(
+            "index.html",
+            execucao=None,
+            aviso="Nenhum CNPJ valido encontrado. Cole a lista ou envie um arquivo .txt, .csv ou .xlsx.",
+        )
+
+    with _trava:
+        if _thread and _thread.is_alive():
+            return redirect(url_for("andamento"))
+
+        _atual = lote.Execucao(cnpjs=cnpjs)
+        visivel = request.form.get("visivel") == "on"
+        todos_comprovantes = request.form.get("comprovante_todos") == "on"
+
+        def rodar(execucao=_atual):
+            lote.executar(
+                execucao.cnpjs,
+                execucao=execucao,
+                visivel=visivel,
+                salvar_comprovante_em_dia=todos_comprovantes,
+            )
+
+        _thread = threading.Thread(target=rodar, daemon=True)
+        _thread.start()
+
+    return redirect(url_for("andamento"))
+
+
+@app.get("/andamento")
+def andamento():
+    if _atual is None:
+        return redirect(url_for("inicio"))
+    return render_template("andamento.html", execucao=_atual)
+
+
+@app.get("/api/estado")
+def api_estado():
+    if _atual is None:
+        return jsonify({"vazio": True})
+    return jsonify(_atual.como_dicionario())
+
+
+@app.post("/cancelar")
+def cancelar():
+    if _atual is not None:
+        _atual.cancelado = True
+        _atual.mensagem = "Cancelando apos a consulta em andamento..."
+    return redirect(url_for("andamento"))
+
+
+@app.get("/resultado")
+def resultado():
+    if _atual is None:
+        return redirect(url_for("inicio"))
+
+    itens = [i.como_dicionario() for i in _atual.resultados_ordenados()]
+    com_ocorrencia = [i for i in itens if i.get("status") != EM_DIA]
+    em_dia = [i for i in itens if i.get("status") == EM_DIA]
+    mudaram = [i for i in itens if i.get("situacao_historico") == historico.MUDOU]
+    return render_template(
+        "resultado.html",
+        execucao=_atual,
+        com_ocorrencia=com_ocorrencia,
+        em_dia=em_dia,
+        mudaram=mudaram,
+        rotulos=ROTULOS,
+        ordem=ORDEM,
+    )
+
+
+@app.get("/baixar/<formato>")
+def baixar(formato: str):
+    if _atual is None:
+        return redirect(url_for("inicio"))
+
+    itens = [i.como_dicionario() for i in _atual.resultados_ordenados()]
+    config.PASTA_SAIDA.mkdir(parents=True, exist_ok=True)
+    carimbo = datetime.now().strftime("%Y%m%d-%H%M%S")
+
+    if formato == "xlsx":
+        caminho = config.PASTA_SAIDA / f"simples-nacional-{carimbo}.xlsx"
+        exportar.gerar_excel(itens, caminho)
+    elif formato == "csv":
+        caminho = config.PASTA_SAIDA / f"simples-nacional-{carimbo}.csv"
+        exportar.gerar_csv(itens, caminho)
+    elif formato == "json":
+        caminho = config.PASTA_SAIDA / f"simples-nacional-{carimbo}.json"
+        lote.salvar_json(_atual, caminho)
+    else:
+        abort(404)
+
+    return send_file(caminho, as_attachment=True)
+
+
+@app.post("/sinal")
+def sinal():
+    """Batida de coracao da interface: diz que ainda tem gente com a tela aberta."""
+    global _ultimo_sinal
+    _ultimo_sinal = time.monotonic()
+    return ("", 204)
+
+
+@app.post("/encerrar")
+def encerrar():
+    if _ha_lote_ativo():
+        return redirect(url_for("andamento"))
+    _encerrar_processo()
+    return render_template("encerrado.html")
+
+
+@app.get("/comprovante/<nome>")
+def comprovante(nome: str):
+    return send_from_directory(config.PASTA_COMPROVANTES, nome)
+
+
+def iniciar_servidor(porta: int = 5000, abrir_navegador: bool = True) -> None:
+    """Sobe a interface local e abre o navegador padrao na tela inicial.
+
+    Se o sistema ja estiver rodando (atalho clicado duas vezes), apenas traz a
+    tela de volta em vez de subir um segundo servidor e falhar na porta.
+    """
+    config.preparar_pastas()
+    endereco = f"http://127.0.0.1:{porta}"
+
+    if _porta_ocupada(porta):
+        if abrir_navegador:
+            webbrowser.open(endereco)
+        print("O sistema ja estava aberto; trouxe a tela de volta.")
+        return
+
+    if abrir_navegador:
+        threading.Timer(1.2, lambda: webbrowser.open(endereco)).start()
+    threading.Thread(target=_vigiar_interface, daemon=True).start()
+
+    print(f"Consulta Simples Nacional rodando em {endereco}")
+    app.run(host="127.0.0.1", port=porta, debug=False)
+
+
+if __name__ == "__main__":
+    iniciar_servidor()

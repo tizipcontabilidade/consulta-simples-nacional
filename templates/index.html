@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+
+{% block conteudo %}
+<section class="cartao">
+  <h1>Consultar CNPJs</h1>
+  <p class="ajuda">
+    Cole um CNPJ por linha (ou separados por virgula) e/ou envie um arquivo
+    <code>.txt</code>, <code>.csv</code> ou <code>.xlsx</code>. Pontuacao e ignorada.
+  </p>
+
+  {% if aviso %}<div class="aviso erro">{{ aviso }}</div>{% endif %}
+
+  <form method="post" action="{{ url_for('consultar') }}" enctype="multipart/form-data">
+    <label for="cnpjs">CNPJs</label>
+    <textarea id="cnpjs" name="cnpjs" rows="9" placeholder="12.345.678/0001-95&#10;00000000000191"></textarea>
+
+    <label for="arquivo">Ou envie um arquivo</label>
+    <input id="arquivo" type="file" name="arquivo" accept=".txt,.csv,.xlsx,.xlsm">
+
+    <div class="opcoes">
+      <label class="checkbox">
+        <input type="checkbox" name="visivel" checked>
+        Mostrar a janela do navegador
+        <small>Deixe marcado: se o portal pedir verificacao, voce resolve na tela e o lote continua.</small>
+      </label>
+      <label class="checkbox">
+        <input type="checkbox" name="comprovante_todos">
+        Salvar comprovante tambem dos CNPJs em dia
+        <small>Por padrao o comprovante e guardado apenas para quem tem ocorrencia.</small>
+      </label>
+    </div>
+
+    <button class="botao" type="submit">Iniciar consulta</button>
+  </form>
+</section>
+
+<section class="cartao secundario">
+  <h2>Como o resultado e classificado</h2>
+  <ul class="legenda">
+    <li><span class="tag alerta">ALERTA</span> Existe evento futuro no portal — por exemplo <em>Exclusao de Oficio - Debitos</em> com data de efeito.</li>
+    <li><span class="tag naooptante">NAO OPTANTE</span> O CNPJ nao consta como optante pelo Simples Nacional hoje.</li>
+    <li><span class="tag atencao">ATENCAO</span> Optante hoje, mas com exclusao ou desenquadramento em periodos anteriores.</li>
+    <li><span class="tag emdia">EM DIA</span> Optante, sem evento futuro e sem historico de saida — entra so no resumo, sem detalhamento.</li>
+    <li><span class="tag erro">ERRO</span> CNPJ invalido ou falha na consulta.</li>
+  </ul>
+</section>
+{% endblock %}

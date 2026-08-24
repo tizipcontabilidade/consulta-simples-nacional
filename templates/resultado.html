@@ -1,0 +1,136 @@
+{% extends "base.html" %}
+{% block titulo %}Resultado | Simples Nacional{% endblock %}
+
+{% macro etiqueta(status) -%}
+  {%- set classe = {'ALERTA':'alerta','NAO OPTANTE':'naooptante','ATENCAO':'atencao','EM DIA':'emdia','ERRO':'erro'}.get(status,'') -%}
+  <span class="tag {{ classe }}">{{ status }}</span>
+{%- endmacro %}
+
+{% block conteudo %}
+<section class="cartao">
+  <div class="cabecalho-resultado">
+    <h1>Resultado</h1>
+    <div class="downloads">
+      <a class="botao" href="{{ url_for('baixar', formato='xlsx') }}">Baixar Excel</a>
+      <a class="botao secundario" href="{{ url_for('baixar', formato='csv') }}">CSV</a>
+      <a class="botao secundario" href="{{ url_for('baixar', formato='json') }}">JSON</a>
+      <a class="botao secundario" href="{{ url_for('inicio') }}">Nova consulta</a>
+    </div>
+  </div>
+
+  <p class="contadores">
+    {{ execucao.total }} CNPJ(s) processado(s) &middot;
+    {{ com_ocorrencia|length }} com ocorrencia &middot;
+    {{ em_dia|length }} em dia &middot;
+    {{ mudaram|length }} com mudanca desde a ultima consulta
+    {% if execucao.cancelado %} &middot; <strong>lote cancelado</strong>{% endif %}
+  </p>
+</section>
+
+{% if mudaram %}
+<section class="cartao destaque">
+  <h2>Mudou desde a ultima consulta</h2>
+  <p class="ajuda">Comparacao com o retrato guardado na rodada anterior de cada CNPJ.</p>
+  {% for item in mudaram %}
+  <article class="mudanca">
+    <header>
+      {{ etiqueta(item.status) }}
+      <strong>{{ item.cnpj_formatado }}</strong>
+      <span class="nome">{{ item.nome_empresarial }}</span>
+    </header>
+    <ul>
+      {% for alteracao in item.mudancas %}
+      <li><strong>{{ alteracao.tipo }}:</strong> {{ alteracao.descricao }}</li>
+      {% endfor %}
+    </ul>
+  </article>
+  {% endfor %}
+</section>
+{% endif %}
+
+<section class="cartao">
+  <h2>Ocorrencias</h2>
+  {% if not com_ocorrencia %}
+    <p class="ajuda">Nenhuma ocorrencia. Todos os CNPJs consultados estao em dia.</p>
+  {% endif %}
+
+  {% for item in com_ocorrencia %}
+  <article class="ocorrencia">
+    <header>
+      {{ etiqueta(item.status) }}
+      <strong>{{ item.cnpj_formatado }}</strong>
+      <span class="nome">{{ item.nome_empresarial or '(sem razao social retornada)' }}</span>
+      {% if item.comprovante %}
+        <a class="link" href="{{ url_for('comprovante', nome=item.comprovante) }}" target="_blank">comprovante</a>
+      {% endif %}
+    </header>
+
+    {% if item.erro %}
+      <p class="linha-erro">{{ item.erro }}</p>
+    {% else %}
+      <p class="situacao">
+        Simples Nacional: <strong>{{ item.situacao_simples }}</strong><br>
+        SIMEI: {{ item.situacao_simei }}
+      </p>
+
+      {% if item.exclusoes_futuras %}
+      <h3>Eventos futuros</h3>
+      <table>
+        <thead><tr><th>Regime</th><th>Evento</th><th>Data de efeito</th></tr></thead>
+        <tbody>
+          {% for evento in item.exclusoes_futuras %}
+          <tr><td>{{ evento.regime }}</td><td>{{ evento.descricao }}</td><td>{{ evento.data_efeito }}</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% endif %}
+
+      {% if item.historico_saidas %}
+      <h3>Exclusoes / desenquadramentos anteriores</h3>
+      <table>
+        <thead><tr><th>Regime</th><th>Periodo</th><th>Detalhamento</th></tr></thead>
+        <tbody>
+          {% for saida in item.historico_saidas %}
+          <tr><td>{{ saida.regime }}</td><td>{{ saida.periodo }}</td><td>{{ saida.detalhamento }}</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% endif %}
+
+      {% if item.mei_transportador %}
+      <h3>MEI Transportador Autonomo de Cargas</h3>
+      <table>
+        <thead><tr><th>Inicio</th><th>Fim</th><th>Detalhamento</th></tr></thead>
+        <tbody>
+          {% for periodo in item.mei_transportador %}
+          <tr><td>{{ periodo.data_inicial }}</td><td>{{ periodo.data_final }}</td><td>{{ periodo.detalhamento }}</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% endif %}
+    {% endif %}
+
+    <footer class="consultado">Consultado em {{ item.data_consulta or '—' }}</footer>
+  </article>
+  {% endfor %}
+</section>
+
+<section class="cartao">
+  <h2>Em dia <span class="ajuda">({{ em_dia|length }})</span></h2>
+  <p class="ajuda">Sem detalhamento, conforme combinado — optantes sem evento futuro e sem historico de saida.</p>
+  {% if em_dia %}
+  <table class="compacta">
+    <thead><tr><th>CNPJ</th><th>Nome empresarial</th><th>Optante desde</th></tr></thead>
+    <tbody>
+      {% for item in em_dia %}
+      <tr>
+        <td>{{ item.cnpj_formatado }}</td>
+        <td>{{ item.nome_empresarial }}</td>
+        <td>{{ item.optante_desde }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+</section>
+{% endblock %}

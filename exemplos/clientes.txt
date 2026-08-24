@@ -1,0 +1,4 @@
+# Um CNPJ por linha. Pontuacao e ignorada; linhas de comentario tambem.
+# Este arquivo e o modelo usado pelo agendamento diario - troque pelos seus CNPJs.
+00.000.000/0001-91
+33.000.167/0001-01

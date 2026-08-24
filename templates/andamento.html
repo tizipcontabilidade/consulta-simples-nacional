@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block titulo %}Consultando... | Simples Nacional{% endblock %}
+
+{% block conteudo %}
+<section class="cartao">
+  <h1>Consulta em andamento</h1>
+
+  <div class="barra"><div id="preenchimento" style="width:0%"></div></div>
+  <p id="mensagem" class="ajuda">Preparando...</p>
+  <p id="contadores" class="contadores"></p>
+
+  <div id="captcha" class="aviso captcha" hidden>
+    O portal pediu verificacao. Resolva o desafio na janela do navegador que foi aberta —
+    o lote continua sozinho logo depois.
+  </div>
+
+  <div class="acoes">
+    <form method="post" action="{{ url_for('cancelar') }}">
+      <button class="botao secundario" type="submit">Cancelar lote</button>
+    </form>
+    <a id="ver" class="botao" href="{{ url_for('resultado') }}" hidden>Ver resultado</a>
+  </div>
+</section>
+
+<script>
+  const preenchimento = document.getElementById("preenchimento");
+  const mensagem = document.getElementById("mensagem");
+  const contadores = document.getElementById("contadores");
+  const captcha = document.getElementById("captcha");
+  const ver = document.getElementById("ver");
+
+  async function atualizar() {
+    try {
+      const estado = await (await fetch("{{ url_for('api_estado') }}")).json();
+      if (estado.vazio) { window.location = "{{ url_for('inicio') }}"; return; }
+
+      preenchimento.style.width = estado.percentual + "%";
+      mensagem.textContent = estado.mensagem;
+      captcha.hidden = !estado.aguardando_captcha;
+
+      const partes = Object.entries(estado.contagem || {})
+        .map(([status, quantidade]) => `${status}: ${quantidade}`);
+      contadores.textContent =
+        `${estado.processados} de ${estado.total} consultados` +
+        (partes.length ? "  —  " + partes.join("  ·  ") : "");
+
+      if (estado.erro_fatal) {
+        mensagem.textContent = "Falha: " + estado.erro_fatal;
+      }
+      if (estado.concluido) {
+        ver.hidden = false;
+        if (!estado.erro_fatal) window.location = "{{ url_for('resultado') }}";
+        return;
+      }
+    } catch (e) {
+      mensagem.textContent = "Sem resposta do servidor local...";
+    }
+    setTimeout(atualizar, 1200);
+  }
+  atualizar();
+</script>
+{% endblock %}

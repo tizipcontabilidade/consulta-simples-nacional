@@ -1,0 +1,8 @@
+__pycache__/
+.venv/
+.perfil-consulta/
+saidas/
+historico/
+build/
+dist/
+instalador/

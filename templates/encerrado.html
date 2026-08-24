@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block titulo %}Encerrado | Simples Nacional{% endblock %}
+
+{# Nesta tela nao ha sinal de vida nem botao de encerrar: o sistema ja saiu. #}
+{% block encerrar %}{% endblock %}
+{% block sinal %}{% endblock %}
+
+{% block conteudo %}
+<section class="cartao centralizado">
+  <h1>Sistema encerrado</h1>
+  <p class="ajuda">
+    Pode fechar esta aba. Os relatorios e comprovantes ja gerados continuam
+    guardados na pasta de saidas.
+  </p>
+  <p class="ajuda">
+    Para consultar de novo, abra o atalho <strong>Consulta Simples Nacional</strong>.
+  </p>
+</section>
+{% endblock %}
