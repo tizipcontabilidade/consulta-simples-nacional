@@ -17,6 +17,14 @@ apenas como uma linha no resumo — sem detalhamento e sem comprovante.
 
 ## Para a equipe: instalar e usar
 
+Baixe a versão mais recente em
+[Releases](https://github.com/tizipcontabilidade/consulta-simples-nacional/releases/latest)
+— `...-setup.exe` para instalar, ou `...-portatil.zip` para rodar sem instalação
+(inclusive de um compartilhamento de rede).
+
+> Enquanto o repositório for privado, só quem tem acesso a ele consegue baixar
+> pelo link. Para quem não tem conta no GitHub, distribua o arquivo direto.
+
 1. Rode `ConsultaSimplesNacional-1.0.0-setup.exe`.
    Não precisa de administrador — instala na pasta do usuário.
 2. Abra **Consulta Simples Nacional** pelo atalho. Não aparece janela preta de
