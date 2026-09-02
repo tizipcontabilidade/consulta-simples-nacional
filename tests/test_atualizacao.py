@@ -256,3 +256,52 @@ def test_lote_em_andamento_vence_a_atualizacao(monkeypatch):
     assert aberturas == [], "o instalador nao pode abrir durante um lote"
     assert encerramentos == [], "o sistema nao pode se encerrar durante um lote"
     assert "lote em andamento" in resposta.get_data(as_text=True).lower()
+
+
+# ---------------------------------------------------------------- a faixa
+# As notas do release vem em Markdown e a faixa mostra texto simples. Sem
+# tratamento, "### Corrigido" e "**negrito**" vazavam como texto na tela da
+# equipe, e a frase ainda era cortada no meio de uma palavra.
+def test_faixa_mostra_so_o_resumo_sem_markdown():
+    corpo = (
+        "A janela da consulta agora trabalha minimizada, sem tomar a tela.\n"
+        "\n"
+        "### Corrigido\n"
+        "\n"
+        "- **A janela tomava a tela a cada CNPJ.** A 1.1.0 passou a chamar\n"
+        "  `bring_to_front()` antes de cada consulta.\n"
+    )
+
+    resumo = atualizacao.resumir_notas(corpo)
+
+    assert resumo == "A janela da consulta agora trabalha minimizada, sem tomar a tela."
+    for marca in ("###", "**", "`", "- "):
+        assert marca not in resumo
+
+
+def test_faixa_limpa_a_marcacao_que_sobra_no_paragrafo():
+    corpo = "Corrige o [portal](http://exemplo) e o `bring_to_front()` da **janela**."
+
+    assert atualizacao.resumir_notas(corpo) == (
+        "Corrige o portal e o bring_to_front() da janela."
+    )
+
+
+def test_faixa_corta_em_espaco_nunca_no_meio_da_palavra():
+    resumo = atualizacao.resumir_notas("palavra " * 60)
+
+    assert len(resumo) <= atualizacao._LIMITE_RESUMO + 3
+    assert resumo.endswith("...")
+    assert not resumo.rstrip(".").endswith("palavr"), "cortou no meio da palavra"
+
+
+def test_faixa_aguenta_notas_vazias():
+    assert atualizacao.resumir_notas("") == ""
+    assert atualizacao.resumir_notas(None) == ""
+
+
+def test_release_real_chega_resumido(api):
+    api.resposta = release("9.9.9")
+    api.resposta["body"] = "Resumo curto.\n\n### Detalhe\n\n- **coisa** tecnica"
+
+    assert atualizacao.verificar(REPO).notas == "Resumo curto."

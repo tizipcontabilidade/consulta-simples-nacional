@@ -92,6 +92,42 @@ def _abrir(url: str, timeout: int):
     return urllib.request.urlopen(pedido, timeout=timeout, context=ssl.create_default_context())
 
 
+# A faixa da tela mostra texto simples, e as notas do release vem em Markdown.
+# Sem tratamento, "### Corrigido" e "**negrito**" vazam como texto e a frase
+# ainda era cortada no meio. Na faixa cabe o resumo; o detalhe fica no link para
+# as notas, que a equipe abre se quiser - e em geral nao quer.
+_LIMITE_RESUMO = 180
+
+_MARCACOES = (
+    (re.compile(r"`{1,3}([^`]*)`{1,3}"), r"\1"),           # `codigo`
+    (re.compile(r"\*\*([^*]+)\*\*"), r"\1"),               # **negrito**
+    (re.compile(r"\[([^\]]+)\]\([^)]*\)"), r"\1"),         # [texto](link)
+    (re.compile(r"^#{1,6}\s*", re.MULTILINE), ""),         # ### titulo
+    (re.compile(r"^[-*]\s+", re.MULTILINE), ""),             # - item
+)
+
+_PARAGRAFOS = re.compile(r"\n\s*\n")
+
+
+def resumir_notas(corpo: str) -> str:
+    """Primeiro paragrafo das notas, em texto simples e curto."""
+    texto = (corpo or "").strip()
+    if not texto:
+        return ""
+
+    # So o primeiro paragrafo: o resto do release e detalhe tecnico.
+    paragrafo = _PARAGRAFOS.split(texto, maxsplit=1)[0]
+    for padrao, troca in _MARCACOES:
+        paragrafo = padrao.sub(troca, paragrafo)
+    paragrafo = " ".join(paragrafo.split())
+
+    if len(paragrafo) <= _LIMITE_RESUMO:
+        return paragrafo
+    # Corta em espaco, nunca no meio de uma palavra.
+    cortado = paragrafo[:_LIMITE_RESUMO].rsplit(" ", 1)[0]
+    return cortado.rstrip(" ,;:.") + "..."
+
+
 def _instalador_do_release(dados: dict) -> tuple:
     """Escolhe o anexo do instalador entre os arquivos do release.
 
@@ -132,7 +168,7 @@ def verificar(repositorio: str = None, timeout: int = None) -> Atualizacao:
     etiqueta = str(dados.get("tag_name") or "").strip()
     atualizacao = Atualizacao(
         versao=etiqueta.lstrip("vV"),
-        notas=str(dados.get("body") or "").strip()[:400],
+        notas=resumir_notas(str(dados.get("body") or "")),
         publicado_em=str(dados.get("published_at") or "")[:10],
         pagina=str(dados.get("html_url") or ""),
     )

@@ -5,7 +5,7 @@
 ; A versao vem do construir.ps1, que a le de simplesnacionalersao.py.
 ; O valor abaixo e so uma rede de seguranca para compilar o .iss na mao.
 #ifndef Versao
-  #define Versao "1.2.1"
+  #define Versao "1.2.2"
 #endif
 #define Publicador "Zip Contabilidade"
 #define Executavel "ConsultaSimplesNacional.exe"

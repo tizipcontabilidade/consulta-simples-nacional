@@ -79,12 +79,33 @@ $setup = Join-Path $raiz "instalador\ConsultaSimplesNacional-$Versao-setup.exe"
 if (-not (Test-Path $setup)) { throw "instalador nao encontrado: $setup" }
 $hash = (Get-FileHash $setup -Algorithm SHA256).Hash.ToLower()
 
+# A faixa da tela mostra apenas o primeiro paragrafo destas notas, em texto
+# simples. Entao a primeira linha e uma frase curta, para a equipe - que nao
+# precisa entender o detalhe. O resto fica para quem abrir as notas.
+$notas = Join-Path $raiz "instalador
+otas-v$Versao.md"
+@"
+Atualizacao do Consulta Simples Nacional para a versao $Versao.
+
+Baixe o instalador abaixo e execute; ou, se ja tem o sistema instalado, use o
+botao **Atualizar agora** que aparece na propria tela.
+
+O Windows avisa que o programa e de origem desconhecida enquanto o instalador
+nao tiver certificado de assinatura: **Mais informacoes** > **Executar assim
+mesmo**.
+
+``````
+SHA-256: $hash
+``````
+
+O que mudou nesta versao esta no
+[CHANGELOG](https://github.com/tizipcontabilidade/consulta-simples-nacional/blob/main/CHANGELOG.md).
+"@ | Out-File $notas -Encoding utf8
+
 Write-Host ""
 Write-Host "Pronto." -ForegroundColor Green
 "{0}  ({1:N0} MB)" -f $setup, ((Get-Item $setup).Length / 1MB)
 Write-Host "SHA-256: $hash"
 Write-Host ""
 Write-Host "Para publicar o release (e com isso avisar a equipe):" -ForegroundColor Yellow
-Write-Host "    gh release create v$Versao `"$setup`" --title `"v$Versao`" --notes-file CHANGELOG.md"
-Write-Host ""
-Write-Host "O sistema instalado consulta o release mais recente e oferece a atualizacao." -ForegroundColor Yellow
+Write-Host "    gh release create v$Versao `"$setup`" --title `"v$Versao`" --notes-file `"$notas`""

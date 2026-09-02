@@ -2,6 +2,17 @@
 
 O formato segue [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/).
 
+## [1.2.2] — 2026-09-02
+
+### Corrigido
+
+- **A faixa de atualização mostrava a marcação Markdown crua.** As notas do
+  release vêm em Markdown e a faixa exibe texto simples, então `###` e `**`
+  vazavam na tela e a frase ainda era cortada no meio de uma palavra. Agora a
+  faixa mostra só o primeiro parágrafo, sem marcação e cortado em espaço — o
+  detalhe fica no link para as notas. O `construir.ps1` passa a gerar as notas
+  do release já com uma primeira linha curta, para a equipe.
+
 ## [1.2.1] — 2026-09-02
 
 ### Corrigido
