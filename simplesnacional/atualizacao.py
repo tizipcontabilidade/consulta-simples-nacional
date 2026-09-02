@@ -111,7 +111,8 @@ _PARAGRAFOS = re.compile(r"\n\s*\n")
 
 def resumir_notas(corpo: str) -> str:
     """Primeiro paragrafo das notas, em texto simples e curto."""
-    texto = (corpo or "").strip()
+    # A BOM entra quando as notas sao escritas por ferramenta do Windows.
+    texto = (corpo or "").lstrip("﻿").strip()
     if not texto:
         return ""
 

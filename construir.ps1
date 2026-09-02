@@ -83,7 +83,7 @@ $hash = (Get-FileHash $setup -Algorithm SHA256).Hash.ToLower()
 # simples. Entao a primeira linha e uma frase curta, para a equipe - que nao
 # precisa entender o detalhe. O resto fica para quem abrir as notas.
 $notas = Join-Path $raiz "instalador\notas-v$Versao.md"
-@"
+$corpo = @"
 Atualizacao do Consulta Simples Nacional para a versao $Versao.
 
 Baixe o instalador abaixo e execute; ou, se ja tem o sistema instalado, use o
@@ -99,7 +99,11 @@ SHA-256: $hash
 
 O que mudou nesta versao esta no
 [CHANGELOG](https://github.com/tizipcontabilidade/consulta-simples-nacional/blob/main/CHANGELOG.md).
-"@ | Out-File $notas -Encoding utf8
+"@
+
+# UTF-8 sem BOM: Out-File -Encoding utf8 no PowerShell 5.1 grava a BOM, e ela
+# viaja ate o corpo do release e reaparece na faixa da tela.
+[System.IO.File]::WriteAllText($notas, $corpo, (New-Object System.Text.UTF8Encoding $false))
 
 Write-Host ""
 Write-Host "Pronto." -ForegroundColor Green

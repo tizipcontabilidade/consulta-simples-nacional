@@ -305,3 +305,11 @@ def test_release_real_chega_resumido(api):
     api.resposta["body"] = "Resumo curto.\n\n### Detalhe\n\n- **coisa** tecnica"
 
     assert atualizacao.verificar(REPO).notas == "Resumo curto."
+
+
+def test_faixa_ignora_a_bom_de_arquivo_do_windows():
+    """Ferramenta do Windows grava UTF-8 com BOM, e ela viaja ate o corpo do
+    release. Invisivel, mas suja a primeira palavra da faixa."""
+    assert atualizacao.resumir_notas("﻿Atualizacao para a versao 1.2.2.") == (
+        "Atualizacao para a versao 1.2.2."
+    )
