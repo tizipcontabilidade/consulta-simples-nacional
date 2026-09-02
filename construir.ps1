@@ -33,7 +33,7 @@ if (-not $Versao) {
 }
 Write-Host "Versao $Versao" -ForegroundColor Cyan
 
-Write-Host "1/4  Conferindo dependencias..." -ForegroundColor Cyan
+Write-Host "1/5  Conferindo dependencias..." -ForegroundColor Cyan
 python -m pip install --disable-pip-version-check -q -r requirements.txt
 python -m pip install --disable-pip-version-check -q pyinstaller
 

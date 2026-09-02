@@ -100,18 +100,20 @@ end;
 // o arquivo e preservado e apenas renomeado, para ninguem perder trabalho.
 procedure LimparExemploAntigo();
 var
-  Caminho, Conteudo: string;
+  Caminho, Texto: string;
+  Bruto: AnsiString;      // LoadStringFromFile so aceita AnsiString
 begin
   Caminho := ExpandConstant('{app}\exemplos\clientes.txt');
   if not FileExists(Caminho) then
     Exit;
 
-  if not LoadStringFromFile(Caminho, Conteudo) then
+  if not LoadStringFromFile(Caminho, Bruto) then
     Exit;
+  Texto := String(Bruto);
 
-  if Pos('00.000.000', Conteudo) > 0 then
+  if Pos('00.000.000', Texto) > 0 then
   begin
-    if Length(Conteudo) < 200 then
+    if Length(Texto) < 200 then
       DeleteFile(Caminho)                                   // e o exemplo intacto
     else
       RenameFile(Caminho, Caminho + '.anterior');           // alguem mexeu: guarda
