@@ -24,8 +24,9 @@ from flask import (
     url_for,
 )
 
-from simplesnacional import config, exportar, historico, lote
+from simplesnacional import atualizacao, config, exportar, historico, lote
 from simplesnacional.analise import EM_DIA, ORDEM, ROTULOS
+from simplesnacional.versao import VERSAO
 
 app = Flask(
     __name__,
@@ -48,8 +49,29 @@ INTERVALO_SINAL = 5                            # ritmo da verificacao
 TOLERANCIA_SINAL = config.TOLERANCIA_SINAL     # silencio maior = ninguem olhando
 
 
+# Manifesto de versao relido de tempos em tempos. E leitura de arquivo local
+# (pasta do Drive sincronizada), entao custa pouco - mas nao a cada clique.
+_atualizacao = atualizacao.Atualizacao()
+_atualizacao_vista_em = 0.0
+
+
 def _ha_lote_ativo() -> bool:
     return _thread is not None and _thread.is_alive()
+
+
+def _checar_atualizacao() -> atualizacao.Atualizacao:
+    global _atualizacao, _atualizacao_vista_em
+    agora = time.monotonic()
+    if agora - _atualizacao_vista_em >= config.INTERVALO_ATUALIZACAO:
+        _atualizacao_vista_em = agora
+        _atualizacao = atualizacao.verificar()
+    return _atualizacao
+
+
+@app.context_processor
+def _contexto_padrao():
+    """Versao e aviso de atualizacao ficam disponiveis em todas as telas."""
+    return {"versao": VERSAO, "atualizacao": _checar_atualizacao()}
 
 
 def _encerrar_processo(atraso: float = 0.6) -> None:
@@ -229,6 +251,42 @@ def sinal():
     global _ultimo_sinal
     _ultimo_sinal = time.monotonic()
     return ("", 204)
+
+
+@app.get("/api/atualizacao")
+def api_atualizacao():
+    return jsonify(_checar_atualizacao().como_dicionario())
+
+
+@app.post("/atualizar")
+def atualizar():
+    """Confere o instalador publicado e o abre, depois se encerra.
+
+    Um lote em andamento sempre vence: atualizar no meio de uma consulta
+    perderia o trabalho, que e exatamente o que este sistema existe para evitar.
+    """
+    if _ha_lote_ativo():
+        return render_template(
+            "andamento.html",
+            execucao=_atual,
+            aviso="Ha um lote em andamento. A atualizacao espera ele terminar.",
+        )
+
+    disponivel = _checar_atualizacao()
+    if not disponivel.instalavel:
+        return render_template(
+            "index.html",
+            execucao=None,
+            aviso=disponivel.problema or "Nao ha atualizacao disponivel agora.",
+        )
+
+    problema = atualizacao.abrir_instalador(disponivel)
+    if problema:
+        return render_template("index.html", execucao=None, aviso=problema)
+
+    # O instalador precisa substituir o executavel que esta rodando agora.
+    _encerrar_processo(2.0)
+    return render_template("atualizando.html", atualizacao=disponivel)
 
 
 @app.post("/encerrar")

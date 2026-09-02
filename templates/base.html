@@ -20,6 +20,24 @@
   </header>
 
   <main>
+    {% if atualizacao and atualizacao.disponivel %}
+    <div class="aviso atualizacao">
+      <div>
+        <strong>Versao {{ atualizacao.versao }} disponivel.</strong>
+        Voce esta na {{ versao }}.
+        {% if atualizacao.publicado_em %}Publicada em {{ atualizacao.publicado_em }}.{% endif %}
+        {% if atualizacao.notas %}<span class="notas">{{ atualizacao.notas }}</span>{% endif %}
+        {% if atualizacao.problema %}<span class="notas">{{ atualizacao.problema }}</span>{% endif %}
+      </div>
+      {% if atualizacao.instalavel %}
+      <form method="post" action="{{ url_for('atualizar') }}">
+        <button class="botao" type="submit"
+                title="Fecha o sistema e abre o instalador da versao nova.">Atualizar agora</button>
+      </form>
+      {% endif %}
+    </div>
+    {% endif %}
+
     {% block conteudo %}{% endblock %}
   </main>
 
@@ -27,6 +45,7 @@
     Dados obtidos do portal oficial do Simples Nacional (Receita Federal) no momento da consulta.
     O sistema roda em segundo plano: fechar esta aba (ou clicar em <strong>Encerrar</strong>)
     finaliza tudo. Um lote em andamento sempre termina antes.
+    <span class="versao">versao {{ versao }}</span>
   </footer>
 
   {% block sinal %}

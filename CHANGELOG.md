@@ -32,6 +32,13 @@ O formato segue [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/).
 
 ### Adicionado
 
+- **Aviso de versão nova.** O sistema lê um `versao.json` publicado numa pasta do
+  Google Drive (sincronizada pelo Drive para Desktop, portanto uma pasta comum) e
+  mostra uma faixa com o botão **Atualizar agora**, que confere o SHA-256, abre o
+  instalador e se encerra para liberar os arquivos. Um lote em andamento sempre
+  vence a atualização. Sem o Drive montado ou com manifesto quebrado, o sistema
+  não avisa nada. A versão passa a ter fonte única em `simplesnacional/versao.py`,
+  de onde o `construir.ps1` a tira para nomear o instalador e gerar o manifesto.
 - **Suporte ao CNPJ alfanumérico** (IN RFB 2.229/2024, em vigor desde julho de
   2026). As 12 primeiras posições aceitam letras de A a Z; os dois dígitos
   verificadores continuam numéricos. O cálculo do DV segue em módulo 11 com os

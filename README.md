@@ -49,6 +49,35 @@ Baixe a versão mais recente em
    minúsculas. Os dois dígitos verificadores continuam numéricos.
 4. Para fechar: botão **Encerrar** no topo, ou simplesmente feche a aba.
 
+### Atualização de versão
+
+O sistema avisa sozinho quando há versão nova. A TI publica duas coisas numa
+pasta do Google Drive — o `construir.ps1` já gera as duas:
+
+```
+G:\Drives compartilhados\Tecnologia da Informação\ConsultaSimplesNacional\
+    ConsultaSimplesNacional-1.0.4-setup.exe
+    versao.json
+```
+
+Como a pasta é sincronizada pelo **Google Drive para Desktop**, ela chega em
+cada máquina como pasta comum: sem HTTP, sem token e sem a tela de verificação
+de vírus que o Drive mostra em download direto de arquivo grande.
+
+O sistema relê o `versao.json` a cada 15 minutos e, se a versão publicada for
+maior que a instalada, mostra uma faixa com o botão **Atualizar agora** — que
+confere o SHA-256, abre o instalador e se encerra para liberar os arquivos.
+**Um lote em andamento sempre vence:** a atualização espera ele terminar.
+
+Se o Drive não estiver montado, a pasta não existir ou o manifesto estiver
+quebrado, o sistema simplesmente não avisa nada — o aviso nunca atrapalha quem
+só quer consultar CNPJ. Para apontar outra pasta, use `CSN_ATUALIZACAO`.
+
+Enquanto não houver certificado de code signing, o SHA-256 do manifesto é a
+única prova de que o instalador que vai rodar é o que a TI publicou. O sistema
+recusa abrir um instalador cujo hash não confere, e o manifesto só pode apontar
+para um arquivo dentro da própria pasta.
+
 ### Como o sistema é encerrado
 
 Não há console para alguém fechar por engano no meio da consulta. Enquanto a

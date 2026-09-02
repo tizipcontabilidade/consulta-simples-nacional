@@ -84,6 +84,19 @@ ESPERA_CAPTCHA = int(os.environ.get("CSN_ESPERA_CAPTCHA", 180))
 # Quantas vezes repetir um CNPJ quando o portal recusa o token do captcha.
 TENTATIVAS = int(os.environ.get("CSN_TENTATIVAS", 3))
 
+# Pasta onde a TI publica o instalador novo e o manifesto `versao.json`. O
+# padrao aponta para o drive compartilhado da Zip no Google Drive para Desktop,
+# que chega na maquina como uma pasta comum - sem HTTP, sem token e sem a tela
+# de verificacao de virus que o Drive mostra em download direto. Vazio ou pasta
+# ausente desliga o aviso de atualizacao, sem barulho.
+PASTA_ATUALIZACAO = os.environ.get(
+    "CSN_ATUALIZACAO",
+    r"G:\Drives compartilhados\Tecnologia da Informação\ConsultaSimplesNacional",
+)
+
+# De quanto em quanto tempo reler o manifesto de versao.
+INTERVALO_ATUALIZACAO = int(os.environ.get("CSN_INTERVALO_ATUALIZACAO", 900))
+
 # Segundos sem sinal de vida da interface antes de o sistema se encerrar
 # sozinho (aba fechada, navegador fechado). Nunca encerra durante um lote.
 TOLERANCIA_SINAL = int(os.environ.get("CSN_TOLERANCIA_SINAL", 30))

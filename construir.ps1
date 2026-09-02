@@ -25,11 +25,19 @@ $ErrorActionPreference = "Stop"
 $raiz = Split-Path -Parent $MyInvocation.MyCommand.Path
 Set-Location $raiz
 
+# A versao mora no codigo (simplesnacionalersao.py) e desce dele para o
+# instalador e para o manifesto - assim nao ha dois numeros para desencontrar.
+if (-not $Versao) {
+    $Versao = (python -c "import sys; sys.path.insert(0,'.'); from simplesnacional.versao import VERSAO; print(VERSAO)").Trim()
+    if (-not $Versao) { throw "nao consegui ler a versao de simplesnacionalersao.py" }
+}
+Write-Host "Versao $Versao" -ForegroundColor Cyan
+
 Write-Host "1/4  Conferindo dependencias..." -ForegroundColor Cyan
 python -m pip install --disable-pip-version-check -q -r requirements.txt
 python -m pip install --disable-pip-version-check -q pyinstaller
 
-Write-Host "2/4  Gerando o executavel (PyInstaller)..." -ForegroundColor Cyan
+Write-Host "2/5  Gerando o executavel (PyInstaller)..." -ForegroundColor Cyan
 python -m PyInstaller empacotar.spec --noconfirm --distpath dist --workpath build
 if ($LASTEXITCODE -ne 0) { throw "PyInstaller falhou" }
 
@@ -47,7 +55,7 @@ if ($SomenteExecutavel) {
     exit 0
 }
 
-Write-Host "3/4  Localizando o compilador do Inno Setup..." -ForegroundColor Cyan
+Write-Host "3/5  Localizando o compilador do Inno Setup..." -ForegroundColor Cyan
 $candidatos = @(
     "$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe",
     "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe",
@@ -60,14 +68,44 @@ if (-not $iscc) {
     throw "ISCC.exe ausente"
 }
 
-Write-Host "4/4  Compilando o instalador..." -ForegroundColor Cyan
+Write-Host "4/5  Compilando o instalador..." -ForegroundColor Cyan
 $parametros = @("instalador.iss")
 if ($Versao) { $parametros = @("/DVersao=$Versao") + $parametros }
 & $iscc @parametros | Select-Object -Last 3
 if ($LASTEXITCODE -ne 0) { throw "Inno Setup falhou" }
+
+Write-Host "5/5  Gerando o manifesto de versao..." -ForegroundColor Cyan
+$setup = Join-Path $raiz "instalador\ConsultaSimplesNacional-$Versao-setup.exe"
+if (-not (Test-Path $setup)) { throw "instalador nao encontrado: $setup" }
+$hash = (Get-FileHash $setup -Algorithm SHA256).Hash.ToLower()
+$notas = ""
+if (Test-Path "CHANGELOG.md") {
+    # Primeiro item da secao da versao atual, so para a faixa da tela.
+    $linhas = Get-Content CHANGELOG.md
+    $inicio = ($linhas | Select-String -Pattern "^## \[$([regex]::Escape($Versao))\]" | Select-Object -First 1)
+    if ($inicio) {
+        $notas = ($linhas[$inicio.LineNumber..($inicio.LineNumber + 12)] |
+                  Where-Object { $_ -match "^- \*\*" } |
+                  Select-Object -First 1) -replace "^- \*\*", "" -replace "\*\*", ""
+    }
+}
+$manifesto = [ordered]@{
+    versao       = $Versao
+    instalador   = Split-Path $setup -Leaf
+    sha256       = $hash
+    notas        = $notas
+    publicado_em = (Get-Date -Format "yyyy-MM-dd")
+}
+$destino = Join-Path $raiz "instaladorersao.json"
+$manifesto | ConvertTo-Json | Out-File $destino -Encoding utf8
+Write-Host "     $destino"
 
 Write-Host ""
 Write-Host "Pronto." -ForegroundColor Green
 Get-ChildItem instalador\*.exe | ForEach-Object {
     "{0}  ({1:N0} MB)" -f $_.FullName, ($_.Length / 1MB)
 }
+Write-Host ""
+Write-Host "Para publicar: copie o setup.exe e o versao.json para" -ForegroundColor Yellow
+Write-Host "    $env:CSN_ATUALIZACAO" -ForegroundColor Yellow
+Write-Host "  (padrao: G:\Drives compartilhados\Tecnologia da Informacao\ConsultaSimplesNacional)" -ForegroundColor Yellow

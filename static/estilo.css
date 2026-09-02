@@ -135,3 +135,11 @@ body > header .encerrar button {
 }
 body > header .encerrar button:hover { background: #2b6b31; color: #fff; }
 .cartao.centralizado { text-align: center; padding: 44px 24px; }
+
+.aviso.atualizacao {
+  background: #eef5ff; border: 1px solid #b9d2f2;
+  display: flex; gap: 16px; align-items: center; justify-content: space-between; flex-wrap: wrap;
+}
+.aviso.atualizacao .notas { display: block; color: var(--tinta-suave); margin-top: 4px; }
+.aviso.atualizacao form { margin: 0; }
+.versao { display: block; margin-top: 8px; opacity: .7; font-size: .8rem; }

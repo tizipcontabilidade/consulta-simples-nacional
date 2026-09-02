@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block encerrar %}{% endblock %}
+{% block sinal %}{% endblock %}
+
+{% block conteudo %}
+<section class="cartao centralizado">
+  <h1>Atualizando para a versao {{ atualizacao.versao }}</h1>
+  <p class="ajuda">
+    O instalador foi aberto em outra janela e o sistema esta se fechando para
+    liberar os arquivos. Siga o instalador e depois abra o
+    <strong>Consulta Simples Nacional</strong> pelo atalho de sempre.
+  </p>
+  <p class="ajuda">
+    O Windows pode avisar que o programa e de origem desconhecida: e esperado
+    enquanto o instalador nao tiver certificado de assinatura. Escolha
+    <strong>Mais informacoes</strong> e depois <strong>Executar assim mesmo</strong>.
+  </p>
+</section>
+{% endblock %}

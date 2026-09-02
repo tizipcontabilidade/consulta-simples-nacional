@@ -2,6 +2,8 @@
 ; Compilar com:  ISCC.exe instalador.iss   (depois de gerar dist\ com o PyInstaller)
 
 #define Nome "Consulta Simples Nacional"
+; A versao vem do construir.ps1, que a le de simplesnacionalersao.py.
+; O valor abaixo e so uma rede de seguranca para compilar o .iss na mao.
 #ifndef Versao
   #define Versao "1.0.3"
 #endif
