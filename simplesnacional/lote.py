@@ -326,6 +326,7 @@ def executar(
     cnpjs: Iterable[str],
     execucao: Optional[Execucao] = None,
     visivel: bool = True,
+    minimizada: bool = True,
     salvar_comprovante_em_dia: bool = False,
     usar_historico: bool = True,
     ao_progredir: Optional[Callable[[Execucao], None]] = None,
@@ -352,7 +353,7 @@ def executar(
     def obter_sessao() -> Sessao:
         nonlocal sessao
         if sessao is None:
-            sessao = Sessao(visivel=visivel, ao_avisar=avisar)
+            sessao = Sessao(visivel=visivel, minimizada=minimizada, ao_avisar=avisar)
             sessao.abrir()
         return sessao
 

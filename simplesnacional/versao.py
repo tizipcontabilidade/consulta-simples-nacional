@@ -5,4 +5,4 @@ tira a versao para nomear o instalador, e e com isso que o sistema instalado se
 compara ao manifesto publicado para saber se ha versao nova.
 """
 
-VERSAO = "1.2.0"
+VERSAO = "1.2.1"

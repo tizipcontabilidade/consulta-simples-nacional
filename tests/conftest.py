@@ -23,9 +23,11 @@ from . import fixturas  # noqa: E402
 class SessaoFalsa:
     """Dubla a sessao de navegador: devolve HTML pronto, sem rede."""
 
-    def __init__(self, respostas: dict, visivel: bool = True, ao_avisar=None):
+    def __init__(self, respostas: dict, visivel: bool = True, minimizada: bool = True,
+                 ao_avisar=None):
         self.respostas = respostas
         self.visivel = visivel
+        self.minimizada = minimizada
         self.ao_avisar = ao_avisar
         self.consultados = []
         self.aberta = False

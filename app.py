@@ -187,6 +187,7 @@ def consultar():
 
         _atual = lote.Execucao(cnpjs=leitura.cnpjs, descartados=leitura.descartados)
         visivel = request.form.get("visivel") == "on"
+        minimizada = request.form.get("minimizada") == "on"
         todos_comprovantes = request.form.get("comprovante_todos") == "on"
 
         def rodar(execucao=_atual):
@@ -194,6 +195,7 @@ def consultar():
                 execucao.cnpjs,
                 execucao=execucao,
                 visivel=visivel,
+                minimizada=minimizada,
                 salvar_comprovante_em_dia=todos_comprovantes,
             )
             _gravar_relatorio(execucao)

@@ -449,3 +449,108 @@ def test_r13_numero_puro_truncado_continua_avisando():
     """Mas numero puro de 12 ou 13 digitos ainda e CNPJ mutilado ate prova em
     contrario - esse aviso e o que fechou o buraco original."""
     assert [d.motivo for d in lote.ler("123456789012").descartados] == [lote.MOTIVO_TAMANHO]
+
+
+# --------------------------------------------------------------------- R14
+# A janela da consulta tomava a tela a cada CNPJ: o _tentar chamava
+# bring_to_front() sempre, para garantir que o hCaptcha montasse o widget. Num
+# lote de 1.179 CNPJs isso e a janela pulando para a frente ~1.200 vezes, a cada
+# 7 segundos, por mais de duas horas.
+#
+# A premissa estava errada. Medido em 02/09/2026 contra o portal real, com o
+# estado da janela confirmado pelo proprio navegador: minimizada, o widget do
+# hCaptcha continua montando normalmente. Quem resolvia o travamento era o
+# descarte de guias extras, nao o bring_to_front.
+class JanelaFalsa:
+    """Pagina que anota quando foi trazida para a frente."""
+
+    def __init__(self, html: str, url: str = "http://teste"):
+        self.html = html
+        self.url = url
+        self.vezes_na_frente = 0
+        self.chamadas = []
+
+    def goto(self, endereco, **_):
+        self.chamadas.append(("goto", endereco))
+
+    def fill(self, seletor, valor):
+        self.chamadas.append(("fill", seletor, valor))
+
+    def click(self, seletor):
+        self.chamadas.append(("click", seletor))
+
+    def wait_for_function(self, expressao, **_):
+        pass
+
+    def bring_to_front(self):
+        self.vezes_na_frente += 1
+
+    def content(self):
+        return self.html
+
+    def query_selector(self, _seletor):
+        return None
+
+    def query_selector_all(self, _seletor):
+        return []
+
+    def set_default_timeout(self, _):
+        pass
+
+    def is_closed(self):
+        return False
+
+
+def _sessao_com_janela(pagina):
+    sessao = scraper.Sessao(visivel=True)
+    sessao._page = pagina
+    sessao._cdp = False          # sem CDP: nao mexe na janela, so observa
+    return sessao
+
+
+def test_r14_consulta_normal_nao_toma_a_tela():
+    """O caso comum - portal respondendo - nao pode roubar o foco de ninguem."""
+    pagina = JanelaFalsa(fixturas.OPTANTE_COM_EVENTOS)
+
+    resposta = _sessao_com_janela(pagina).consultar(fixturas.CNPJ_COM_EVENTOS)
+
+    assert resposta.ok is True
+    assert pagina.vezes_na_frente == 0, "consulta que deu certo nao sobe a janela"
+
+
+def test_r14_varios_cnpjs_seguidos_nao_tomam_a_tela():
+    """O defeito so aparecia no volume: uma vez e incomodo, mil e inviavel."""
+    pagina = JanelaFalsa(fixturas.OPTANTE_COM_EVENTOS)
+    sessao = _sessao_com_janela(pagina)
+
+    for _ in range(50):
+        sessao.consultar(fixturas.CNPJ_COM_EVENTOS)
+
+    assert pagina.vezes_na_frente == 0
+
+
+def test_r14_janela_sobe_quando_o_portal_recusa_o_token(monkeypatch):
+    """Recusa de token e o sintoma de o captcha nao estar montando - ai sim vale
+    chamar quem esta operando."""
+    monkeypatch.setattr(scraper.time, "sleep", lambda _s: None)
+    pagina = JanelaFalsa(fixturas.CNPJ_INVALIDO_HTML)
+    pagina.query_selector_all = lambda seletor: (
+        [ElementoFalso("Impedido por protecao Captcha. Erro na validacao do Token")]
+        if "validation" in seletor or "danger" in seletor else []
+    )
+
+    resposta = _sessao_com_janela(pagina).consultar(fixturas.CNPJ_COM_EVENTOS)
+
+    assert resposta.ok is False
+    assert pagina.vezes_na_frente > 0, "aqui a janela precisa aparecer"
+
+
+def test_r14_a_sessao_nasce_minimizada():
+    """O padrao e trabalhar em segundo plano, nao ocupar a tela."""
+    assert scraper.Sessao().minimizada is True
+
+
+def test_r14_lote_repassa_a_escolha_da_janela(pastas_temporarias, sessao_falsa):
+    lote.executar([fixturas.CNPJ_EM_DIA], visivel=True, minimizada=False)
+
+    assert sessao_falsa[0].minimizada is False

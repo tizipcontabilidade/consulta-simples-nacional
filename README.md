@@ -130,6 +130,7 @@ linha de comando; o `ConsultaSimplesNacional.exe` é só a interface.
 | `--somente-mudancas` | relata só quem mudou desde a consulta anterior |
 | `--sem-historico` | não lê nem grava o histórico de comparação |
 | `--oculto` | roda sem janela (se o portal pedir captcha, o CNPJ falha) |
+| `--janela-aberta` | deixa a janela do navegador na tela (o padrão é minimizada) |
 | `--silencioso` | imprime só o resumo final |
 
 Códigos de saída: `0` nada a tratar · `1` há ocorrência (ou mudança) ·

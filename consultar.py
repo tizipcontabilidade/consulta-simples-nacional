@@ -66,6 +66,10 @@ def _argumentos():
         "--oculto", action="store_true",
         help="roda com o navegador escondido (se o portal pedir captcha, o CNPJ falha)",
     )
+    analisador.add_argument(
+        "--janela-aberta", action="store_true",
+        help="deixa a janela do navegador aberta na tela (o padrao e minimizada)",
+    )
     analisador.add_argument("--silencioso", action="store_true", help="imprime so o resumo final")
     return analisador.parse_args()
 
@@ -105,6 +109,7 @@ def main() -> int:
         cnpjs,
         execucao=lote.Execucao(cnpjs=cnpjs, descartados=leitura.descartados),
         visivel=not argumentos.oculto,
+        minimizada=not argumentos.janela_aberta,
         usar_historico=not argumentos.sem_historico,
         ao_progredir=progresso,
     )

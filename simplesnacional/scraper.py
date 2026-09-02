@@ -47,10 +47,17 @@ class Sessao:
     """Sessao de navegador reaproveitada por todo um lote de consultas."""
 
     visivel: bool = True
+    # A janela abre minimizada e trabalha em segundo plano. Medido em 02/09/2026:
+    # com a janela minimizada o hCaptcha continua montando o widget normalmente,
+    # entao nao ha motivo para tomar a tela de quem esta trabalhando. Ela so sobe
+    # quando o operador precisa agir - desafio de captcha ou recusa de token.
+    minimizada: bool = True
     ao_avisar: Optional[Callable[[str], None]] = None
     _pw: object = field(default=None, repr=False)
     _ctx: object = field(default=None, repr=False)
     _page: object = field(default=None, repr=False)
+    _cdp: object = field(default=None, repr=False)
+    _janela: object = field(default=None, repr=False)
 
     # ------------------------------------------------------------------ ciclo
     def abrir(self) -> "Sessao":
@@ -75,13 +82,48 @@ class Sessao:
                 "--no-first-run",
                 "--no-default-browser-check",
                 "--disable-session-crashed-bubble",
+                # A janela fica minimizada durante o lote; sem isto o navegador
+                # pode hibernar a aba por considera-la oculta, e ai o hCaptcha
+                # para de montar.
+                "--disable-backgrounding-occluded-windows",
+                "--disable-renderer-backgrounding",
+                "--disable-features=CalculateNativeWinOcclusion",
             ],
         )
         self._page = self._ctx.pages[0] if self._ctx.pages else self._ctx.new_page()
         self._page.set_default_timeout(30_000)
         self._descartar_guias_extras()
         self._ctx.on("page", self._ao_abrir_guia)
+        if self.visivel and self.minimizada:
+            self._mudar_janela("minimized")
         return self
+
+    # ----------------------------------------------------------------- janela
+    def _mudar_janela(self, estado: str) -> None:
+        """Minimiza ou restaura a janela do navegador, se o CDP permitir."""
+        if self._cdp is False or self._ctx is None or self._page is None:
+            return
+        try:
+            if self._cdp is None:
+                self._cdp = self._ctx.new_cdp_session(self._page)
+                self._janela = self._cdp.send("Browser.getWindowForTarget")["windowId"]
+            self._cdp.send(
+                "Browser.setWindowBounds",
+                {"windowId": self._janela, "bounds": {"windowState": estado}},
+            )
+        except Exception:
+            # Navegador sem esse comando: segue sem mexer na janela, que e um
+            # conforto, nao um requisito da consulta.
+            self._cdp = False
+
+    def chamar_o_operador(self) -> None:
+        """Sobe a janela. So quando alguem precisa mesmo olhar para ela."""
+        self._mudar_janela("normal")
+        try:
+            if self._page is not None:
+                self._page.bring_to_front()
+        except (PWTimeout, PWError):
+            pass
 
     # ------------------------------------------------------------------ guias
     # Guia extra (boas-vindas do navegador, restauracao de sessao, popup) rouba
@@ -147,6 +189,10 @@ class Sessao:
 
             resposta.precisou_captcha = True
             if tentativa < config.TENTATIVAS:
+                # Recusa de token e o sintoma de a consulta nao estar conseguindo
+                # montar o captcha. Ai vale subir a janela - e raro, ao contrario
+                # de faze-lo a cada CNPJ.
+                self.chamar_o_operador()
                 espera = 5 * tentativa
                 self._avisar(
                     f"O portal recusou a verificacao do CNPJ {cnpj} "
@@ -165,9 +211,9 @@ class Sessao:
             return resposta
 
         try:
-            # O hCaptcha so monta o widget na guia em primeiro plano.
+            # Guia extra por cima e o que trava a consulta - ela sai. A janela
+            # em si nao precisa vir para a frente: fica minimizada trabalhando.
             self._descartar_guias_extras()
-            page.bring_to_front()
             page.goto(config.URL_FORMULARIO, wait_until="domcontentloaded")
             page.fill("#Cnpj", cnpj)
             self._esperar_captcha_pronto(page)
@@ -203,6 +249,7 @@ class Sessao:
                 resposta.precisou_captcha = True
                 if not avisou:
                     avisou = True
+                    self.chamar_o_operador()
                     self._avisar(
                         f"O portal pediu verificacao (captcha) para o CNPJ {cnpj}. "
                         "Resolva o desafio na janela do navegador; o lote continua sozinho."

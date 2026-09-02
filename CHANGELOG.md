@@ -2,6 +2,26 @@
 
 O formato segue [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/).
 
+## [1.2.1] — 2026-09-02
+
+### Corrigido
+
+- **A janela da consulta tomava a tela a cada CNPJ.** A 1.1.0 passou a chamar
+  `bring_to_front()` antes de cada consulta, partindo da premissa de que o
+  hCaptcha não montaria o widget com a janela em segundo plano. Num lote de 1.179
+  CNPJs isso é a janela pulando para a frente cerca de 1.200 vezes, a cada 7
+  segundos, por mais de duas horas — inviável para quem precisa trabalhar.
+
+  A premissa estava errada. Medido contra o portal real, com o estado da janela
+  confirmado pelo próprio navegador: **minimizada, o widget do hCaptcha continua
+  montando normalmente**. Quem resolvia o travamento relatado na 1.1.0 era o
+  descarte de guias extras, não o `bring_to_front`.
+
+  Agora a janela **abre minimizada e trabalha em segundo plano**. Ela sobe
+  sozinha só quando alguém precisa agir: desafio de captcha na tela, ou recusa de
+  token pelo portal. Há uma caixa na tela inicial e a opção `--janela-aberta` na
+  CLI para quem quiser acompanhar a consulta.
+
 ## [1.2.0] — 2026-09-02
 
 ### Corrigido
