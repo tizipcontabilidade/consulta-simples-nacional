@@ -13,6 +13,14 @@ Sistema local para consultar CNPJs — um a um ou em lote — no portal
 CNPJ **em dia** (optante, sem evento futuro e sem histórico de saída) entra
 apenas como uma linha no resumo — sem detalhamento e sem comprovante.
 
+> **Projeto independente.** Não tem vínculo, patrocínio nem endosso da Receita
+> Federal, do Comitê Gestor do Simples Nacional ou de qualquer órgão público.
+> "Simples Nacional" é o nome do regime tributário e aparece aqui apenas para
+> descrever o que a ferramenta consulta. Os dados vêm do portal público, no
+> momento da consulta, e a fonte oficial é sempre o próprio portal. A ferramenta
+> não usa certificado digital, não acessa o e-CAC e não tenta contornar o
+> captcha do portal — veja [SECURITY.md](SECURITY.md).
+
 ---
 
 ## Para a equipe: instalar e usar

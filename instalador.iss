@@ -93,11 +93,13 @@ begin
 end;
 
 [Code]
-// Versoes ate a 1.1.0 publicavam exemplos\clientes.txt com um CNPJ real usado
-// como exemplo. O arquivo ficava para tras nas maquinas porque era instalado
-// com onlyifdoesntexist. Aqui ele e removido - mas so quando ainda contem o
-// exemplo publicado por nos: se alguem trocou o conteudo pela propria lista,
-// o arquivo e preservado e apenas renomeado, para ninguem perder trabalho.
+// Versoes ate a 1.1.0 publicavam exemplos\clientes.txt como exemplo, e o
+// arquivo ficava para tras nas maquinas porque era instalado com
+// onlyifdoesntexist. Aqui ele e removido - mas so quando ainda e o arquivo que
+// publicamos, reconhecido pelo cabecalho que vinha nele. Se alguem trocou o
+// conteudo pela propria lista, o arquivo e apenas renomeado: ninguem perde
+// trabalho. O reconhecimento e pelo nosso proprio texto, nunca por um numero
+// de documento - este arquivo e publico.
 procedure LimparExemploAntigo();
 var
   Caminho, Texto: string;
@@ -111,7 +113,7 @@ begin
     Exit;
   Texto := String(Bruto);
 
-  if Pos('00.000.000', Texto) > 0 then
+  if Pos('# Um CNPJ por linha', Texto) > 0 then
   begin
     if Length(Texto) < 200 then
       DeleteFile(Caminho)                                   // e o exemplo intacto
