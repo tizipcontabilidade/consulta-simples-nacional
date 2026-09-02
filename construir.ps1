@@ -82,8 +82,7 @@ $hash = (Get-FileHash $setup -Algorithm SHA256).Hash.ToLower()
 # A faixa da tela mostra apenas o primeiro paragrafo destas notas, em texto
 # simples. Entao a primeira linha e uma frase curta, para a equipe - que nao
 # precisa entender o detalhe. O resto fica para quem abrir as notas.
-$notas = Join-Path $raiz "instalador
-otas-v$Versao.md"
+$notas = Join-Path $raiz "instalador\notas-v$Versao.md"
 @"
 Atualizacao do Consulta Simples Nacional para a versao $Versao.
 
