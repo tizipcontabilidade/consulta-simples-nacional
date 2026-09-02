@@ -1,12 +1,12 @@
 # Plano e resultado dos testes
 
-Execução em 24/08/2026, sobre a versão 1.0.2 (Windows 11, Python 3.12).
+Execução em 02/09/2026, sobre a versão 1.1.0 (Windows 11, Python 3.12).
 
 ```bash
 python -m pytest -q
 ```
 
-**97 testes automatizados, todos passando.** Os testes que dependem do portal da
+**139 testes automatizados, todos passando.** Os testes que dependem do portal da
 Receita, do instalador e do Agendador de Tarefas são feitos à mão e estão
 registrados aqui com o resultado observado.
 
@@ -114,40 +114,37 @@ dados fora da pasta de instalação; `.gitignore` protegendo dados de cliente.
 A tarefa de teste foi registrada com nome temporário e removida ao final.
 
 
-## Teste de volume (portal real, 24/08/2026)
+## Teste de volume (portal real)
 
-Carteira real de **105 CNPJs**, executada pela CLI em duas etapas (amostra de 10,
-depois os 95 restantes).
+Duas execuções contra o portal real, com listas de CNPJs reais de uso próprio.
+Os números abaixo descrevem o **comportamento do sistema**; a composição das
+listas não é publicada.
 
 | Verificação | Resultado |
 |---|---|
-| CNPJs consultados | **105 de 105**, nenhuma falha |
-| Desafios de hCaptcha | nenhum |
+| Lote de ~100 CNPJs (24/08/2026) | consultados integralmente, nenhuma falha |
+| Lote de ~1.200 CNPJs (02/09/2026) | consultados integralmente, 1 erro de portal |
+| Desafios de hCaptcha | nenhum, nas duas execuções |
 | Recusas de token | nenhuma |
-| Tempo total | ~16 minutos (~9 s por CNPJ, incluindo a pausa) |
-| Comprovantes salvos | 46 — exatamente os CNPJs com ocorrência |
+| Ritmo observado | ~7,5 s por CNPJ, dos quais ~6 s são a pausa configurável |
 
-Distribuição encontrada:
+O primeiro lote fechou a lacuna de cobertura mais importante: o caminho `EM DIA`
+nunca tinha sido exercitado contra o portal real, e é a regra central do sistema.
 
-| Status | Qtd | % |
-|---|---|---|
-| `EM DIA` | 59 | 56% |
-| `ALERTA` | 26 | 25% |
-| `ATENCAO` | 16 | 15% |
-| `NAO OPTANTE` | 4 | 4% |
+O segundo lote validou o motor de importação reescrito na 1.1.0 — inclusive a
+conferência de que o total lido bate com consultados mais descartados — e mostrou
+que a frequência de acesso atual continua passando limpo em volume dez vezes
+maior.
 
-Este lote fechou a lacuna de cobertura mais importante: o caminho `EM DIA` nunca
-tinha sido exercitado contra o portal real, e é a regra central do sistema.
-
-O lote também revelou o defeito corrigido na 1.0.2 — um CNPJ da lista vinha com
-13 dígitos (zero à esquerda comido pela planilha) e era descartado sem aviso.
+Cada lote também revelou um defeito, ambos do mesmo tipo: entrada descartada em
+silêncio na importação. Ver R8 (1.0.2) e R9 (1.1.0).
 
 ---
 
 ## O que os testes não cobrem
 
-- **Comportamento do hCaptcha acima de ~100 consultas.** O lote de 105 passou
-  limpo; não há garantia para volumes muito maiores — é o motivo de a pausa
+- **Comportamento do hCaptcha em volumes muito altos.** Os lotes de ~100 e
+  ~1.200 passaram limpos; não há garantia acima disso — é o motivo de a pausa
   entre consultas ser configurável.
 - **Mudanças de layout no portal.** O parser é guiado pelos títulos dos painéis;
   se a Receita mudar a página, os testes continuam passando (usam fixturas) e a

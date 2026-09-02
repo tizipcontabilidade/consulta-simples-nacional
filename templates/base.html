@@ -28,6 +28,10 @@
         {% if atualizacao.publicado_em %}Publicada em {{ atualizacao.publicado_em }}.{% endif %}
         {% if atualizacao.notas %}<span class="notas">{{ atualizacao.notas }}</span>{% endif %}
         {% if atualizacao.problema %}<span class="notas">{{ atualizacao.problema }}</span>{% endif %}
+        {% if atualizacao.pagina %}
+        <span class="notas"><a class="link" href="{{ atualizacao.pagina }}" target="_blank"
+              rel="noopener noreferrer">ver as notas da versao</a></span>
+        {% endif %}
       </div>
       {% if atualizacao.instalavel %}
       <form method="post" action="{{ url_for('atualizar') }}">

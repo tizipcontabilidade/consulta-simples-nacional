@@ -1,69 +1,105 @@
-"""Aviso de versao nova a partir do manifesto na pasta compartilhada.
+"""Aviso de versao nova pelos releases publicos do GitHub.
 
-O canal e uma pasta do Google Drive sincronizada pelo Drive para Desktop, entao
-tudo aqui e leitura de arquivo local - nao ha rede para simular.
+Nenhum teste aqui toca a rede: a API do GitHub e dublada, como o portal e dublado
+no resto da suite. O que se verifica e a decisao do sistema diante da resposta.
 """
 from __future__ import annotations
 
+import io
 import json
+import urllib.error
 
 import pytest
 
 from simplesnacional import atualizacao
 from simplesnacional.versao import VERSAO
 
+REPO = "exemplo/repositorio"
 
-def publicar(pasta, versao="9.9.9", conteudo=b"instalador de mentira", **extra):
-    """Monta uma pasta de atualizacao completa e devolve o manifesto gravado."""
-    nome = f"ConsultaSimplesNacional-{versao}-setup.exe"
-    (pasta / nome).write_bytes(conteudo)
+
+def release(versao="9.9.9", anexos=None, **extra):
+    """Resposta da API de releases, no formato que o GitHub devolve."""
+    if anexos is None:
+        anexos = [
+            {
+                "name": f"ConsultaSimplesNacional-{versao}-setup.exe",
+                "browser_download_url": (
+                    f"https://github.com/{REPO}/releases/download/v{versao}/"
+                    f"ConsultaSimplesNacional-{versao}-setup.exe"
+                ),
+                "size": 54_000_000,
+            }
+        ]
     dados = {
-        "versao": versao,
-        "instalador": nome,
-        "sha256": atualizacao.impressao_digital(pasta / nome),
-        "notas": "Corrige a importacao.",
-        "publicado_em": "2026-09-02",
+        "tag_name": f"v{versao}",
+        "body": "Corrige a importacao.",
+        "published_at": "2026-09-02T12:00:00Z",
+        "html_url": f"https://github.com/{REPO}/releases/tag/v{versao}",
+        "assets": anexos,
     }
     dados.update(extra)
-    (pasta / atualizacao.NOME_MANIFESTO).write_text(json.dumps(dados), encoding="utf-8")
     return dados
 
 
-# ------------------------------------------------------------------ deteccao
-def test_avisa_quando_ha_versao_nova(tmp_path):
-    publicar(tmp_path)
+@pytest.fixture
+def api(monkeypatch):
+    """Dubla a API. `api.resposta` define o que ela devolve nesta chamada."""
 
-    achada = atualizacao.verificar(tmp_path)
+    class Api:
+        resposta = None
+        erro = None
+        chamadas = []
+
+    def falso_abrir(url, timeout):
+        Api.chamadas.append(url)
+        if Api.erro is not None:
+            raise Api.erro
+        corpo = json.dumps(Api.resposta).encode("utf-8")
+        fluxo = io.BytesIO(corpo)
+        fluxo.__enter__ = lambda: fluxo
+        fluxo.__exit__ = lambda *_: None
+        return fluxo
+
+    monkeypatch.setattr(atualizacao, "_abrir", falso_abrir)
+    return Api
+
+
+# ------------------------------------------------------------------ deteccao
+def test_avisa_quando_ha_release_mais_novo(api):
+    api.resposta = release("9.9.9")
+
+    achada = atualizacao.verificar(REPO)
 
     assert achada.disponivel is True
     assert achada.instalavel is True
-    assert achada.versao == "9.9.9"
+    assert achada.versao == "9.9.9", "o 'v' da etiqueta nao entra na versao"
     assert achada.notas == "Corrige a importacao."
+    assert achada.publicado_em == "2026-09-02"
 
 
-def test_nao_avisa_quando_a_versao_publicada_e_a_instalada(tmp_path):
-    publicar(tmp_path, versao=VERSAO)
+def test_nao_avisa_quando_o_release_e_a_versao_instalada(api):
+    api.resposta = release(VERSAO)
 
-    assert atualizacao.verificar(tmp_path).disponivel is False
+    assert atualizacao.verificar(REPO).disponivel is False
 
 
-def test_nao_avisa_quando_a_publicada_e_mais_velha(tmp_path):
-    publicar(tmp_path, versao="0.0.1")
+def test_nao_avisa_quando_o_release_e_mais_velho(api):
+    api.resposta = release("0.0.1")
 
-    assert atualizacao.verificar(tmp_path).disponivel is False
+    assert atualizacao.verificar(REPO).disponivel is False
 
 
 @pytest.mark.parametrize(
     "candidata, atual, esperado",
     [
-        ("1.0.4", "1.0.3", True),
+        ("1.1.1", "1.1.0", True),
         ("1.0.10", "1.0.9", True),   # comparar como texto poria 1.0.10 antes
         ("1.10.0", "1.9.0", True),
         ("2.0", "1.9.9", True),
-        ("1.0.3", "1.0.3", False),
-        ("1.0.2", "1.0.3", False),
-        ("", "1.0.3", False),
-        ("sem numero", "1.0.3", False),
+        ("1.1.0", "1.1.0", False),
+        ("1.0.3", "1.1.0", False),
+        ("", "1.1.0", False),
+        ("sem numero", "1.1.0", False),
     ],
 )
 def test_comparacao_de_versao(candidata, atual, esperado):
@@ -71,92 +107,136 @@ def test_comparacao_de_versao(candidata, atual, esperado):
 
 
 # --------------------------------------------------------------- tolerancia
-# Drive nao montado, pasta ainda nao criada, manifesto pela metade: nada disso
-# pode atrapalhar quem so quer consultar CNPJ.
-def test_pasta_inexistente_nao_quebra(tmp_path):
-    achada = atualizacao.verificar(tmp_path / "nao-existe")
+# Sem internet, atras de proxy, API fora do ar: nada disso pode atrapalhar quem
+# so quer consultar CNPJ.
+def test_sem_internet_nao_quebra(api):
+    api.erro = urllib.error.URLError("sem rede")
+
+    achada = atualizacao.verificar(REPO)
 
     assert achada.disponivel is False
     assert achada.problema == ""
 
 
-def test_pasta_desligada_nao_quebra():
+def test_timeout_nao_quebra(api):
+    api.erro = TimeoutError()
+
+    assert atualizacao.verificar(REPO).disponivel is False
+
+
+def test_resposta_ilegivel_nao_quebra(api):
+    api.resposta = "isto nao e um objeto de release"
+
+    assert atualizacao.verificar(REPO).disponivel is False
+
+
+def test_repositorio_desligado_nem_chama_a_api(api):
     assert atualizacao.verificar("").disponivel is False
+    assert api.chamadas == []
 
 
-def test_manifesto_ilegivel_nao_quebra(tmp_path):
-    (tmp_path / atualizacao.NOME_MANIFESTO).write_text("{ isto nao e json", encoding="utf-8")
+def test_release_sem_instalador_avisa_o_problema(api):
+    api.resposta = release("9.9.9", anexos=[])
 
-    achada = atualizacao.verificar(tmp_path)
-
-    assert achada.disponivel is False
-    assert "ilegivel" in achada.problema
-
-
-def test_versao_anunciada_sem_instalador_avisa_o_problema(tmp_path):
-    (tmp_path / atualizacao.NOME_MANIFESTO).write_text(
-        json.dumps({"versao": "9.9.9", "instalador": "que-nao-existe.exe"}), encoding="utf-8"
-    )
-
-    achada = atualizacao.verificar(tmp_path)
+    achada = atualizacao.verificar(REPO)
 
     assert achada.disponivel is True
-    assert achada.instalavel is False, "sem o arquivo nao ha o que instalar"
-    assert "nao esta na pasta" in achada.problema
+    assert achada.instalavel is False, "sem anexo nao ha o que instalar"
+    assert "nao traz o instalador" in achada.problema
+
+
+def test_ignora_anexos_que_nao_sao_o_instalador(api):
+    api.resposta = release(
+        "9.9.9",
+        anexos=[
+            {"name": "codigo-fonte.zip", "browser_download_url":
+             "https://github.com/x/y/releases/download/v9.9.9/codigo-fonte.zip", "size": 100},
+            {"name": "ConsultaSimplesNacional-9.9.9-setup.exe", "browser_download_url":
+             "https://github.com/x/y/releases/download/v9.9.9/ConsultaSimplesNacional-9.9.9-setup.exe",
+             "size": 54_000_000},
+        ],
+    )
+
+    assert atualizacao.verificar(REPO).url_instalador.endswith("-setup.exe")
 
 
 # ---------------------------------------------------------------- seguranca
-# Sem certificado de code signing, o SHA-256 do manifesto e a unica prova de que
-# o arquivo que vai rodar e o que a TI publicou.
-def test_instalador_adulterado_nao_e_aberto(tmp_path):
-    publicar(tmp_path)
-    achada = atualizacao.verificar(tmp_path)
-    achada.instalador.write_bytes(b"outra coisa qualquer")
-
-    problema = atualizacao.conferir(achada)
-
-    assert "nao confere" in problema
-
-
-def test_manifesto_sem_hash_nao_deixa_instalar(tmp_path):
-    publicar(tmp_path, sha256="")
-
-    assert "SHA-256" in atualizacao.conferir(atualizacao.verificar(tmp_path))
-
-
 @pytest.mark.parametrize(
-    "nome",
+    "endereco",
     [
-        r"..\..\Windows\System32\calc.exe",
-        "../../algo.exe",
-        r"C:\Windows\System32\calc.exe",
-        r"\\servidor\publico\algo.exe",
-        "..",
+        "https://exemplo-malicioso.com/ConsultaSimplesNacional-9.9.9-setup.exe",
+        "http://github.com/x/y/ConsultaSimplesNacional-9.9.9-setup.exe",   # sem TLS
+        "file:///C:/Windows/System32/calc.exe",
+        "",
     ],
 )
-def test_manifesto_nao_pode_apontar_para_fora_da_propria_pasta(tmp_path, nome):
-    """Manifesto e arquivo em pasta compartilhada: muita gente pode escrever
-    nele. Ele nao pode virar um jeito de fazer o sistema abrir qualquer .exe."""
-    (tmp_path / atualizacao.NOME_MANIFESTO).write_text(
-        json.dumps({"versao": "9.9.9", "instalador": nome}), encoding="utf-8"
+def test_instalador_fora_do_github_e_recusado(api, endereco):
+    """O sistema baixa e executa esse arquivo. O endereco tem de ser do GitHub."""
+    api.resposta = release(
+        "9.9.9",
+        anexos=[{"name": "ConsultaSimplesNacional-9.9.9-setup.exe",
+                 "browser_download_url": endereco, "size": 54_000_000}],
     )
 
-    achada = atualizacao.verificar(tmp_path)
+    achada = atualizacao.verificar(REPO)
 
-    assert achada.instalador is None
+    assert achada.url_instalador == ""
     assert achada.instalavel is False
 
 
+def test_anexo_grande_demais_e_recusado(api):
+    api.resposta = release(
+        "9.9.9",
+        anexos=[{"name": "ConsultaSimplesNacional-9.9.9-setup.exe",
+                 "browser_download_url": f"https://github.com/{REPO}/releases/download/v9/x-setup.exe",
+                 "size": 10 * 1024 * 1024 * 1024}],
+    )
+
+    assert atualizacao.verificar(REPO).instalavel is False
+
+
+def test_baixar_recusa_endereco_que_nao_e_do_github():
+    achada = atualizacao.Atualizacao(
+        versao="9.9.9", url_instalador="https://exemplo-malicioso.com/setup.exe"
+    )
+
+    assert "nao e do GitHub" in atualizacao.baixar(achada)
+
+
+def test_download_truncado_e_descartado(api, monkeypatch, tmp_path):
+    """Instalador pela metade nao pode ser executado."""
+    api.resposta = release("9.9.9")
+    achada = atualizacao.verificar(REPO)
+    monkeypatch.setattr(atualizacao.tempfile, "gettempdir", lambda: str(tmp_path))
+
+    def baixa_pela_metade(url, timeout):
+        fluxo = io.BytesIO(b"apenas o comeco do arquivo")
+        fluxo.__enter__ = lambda: fluxo
+        fluxo.__exit__ = lambda *_: None
+        return fluxo
+
+    monkeypatch.setattr(atualizacao, "_abrir", baixa_pela_metade)
+
+    problema = atualizacao.baixar(achada)
+
+    assert "incompleto" in problema
+    assert achada.baixado is None
+    assert list(tmp_path.glob("*.exe")) == [], "o arquivo truncado tem de sumir"
+
+
 # ------------------------------------------------------------- lote primeiro
-def test_lote_em_andamento_vence_a_atualizacao(tmp_path, monkeypatch):
+def test_lote_em_andamento_vence_a_atualizacao(monkeypatch):
     """Atualizar no meio de uma consulta perderia o trabalho ja feito - que e
     exatamente o que este sistema existe para evitar."""
     import app as aplicacao
-    from simplesnacional import config, lote
+    from simplesnacional import lote
 
-    publicar(tmp_path)
-    monkeypatch.setattr(config, "PASTA_ATUALIZACAO", str(tmp_path))
     monkeypatch.setattr(aplicacao, "_atualizacao_vista_em", 0.0)
+    monkeypatch.setattr(
+        aplicacao.atualizacao, "verificar", lambda *a, **k: atualizacao.Atualizacao(
+            versao="9.9.9", url_instalador="https://github.com/x/y/z-setup.exe"
+        )
+    )
 
     aberturas, encerramentos = [], []
     monkeypatch.setattr(aplicacao.atualizacao, "abrir_instalador",

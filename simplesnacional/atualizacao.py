@@ -1,23 +1,15 @@
-"""Aviso de versao nova a partir de um manifesto numa pasta compartilhada.
+"""Aviso de versao nova, a partir dos releases publicos do GitHub.
 
-A distribuicao da equipe e por pasta do Google Drive sincronizada pelo Drive
-para Desktop, entao o manifesto e o instalador sao arquivos locais comuns: sem
-HTTP, sem token, sem a tela de "nao foi possivel verificar virus" que o Drive
-mostra em download direto de arquivo grande.
+O repositorio e publico, entao a API de releases responde sem autenticacao: nao
+ha token para embutir no executavel instalado em cada maquina - que seria o
+problema se o repositorio fosse privado.
 
-O manifesto e um `versao.json` ao lado do instalador:
+O sistema le apenas o release mais recente, compara com a versao instalada e,
+havendo versao nova, oferece o instalador anexado ao release.
 
-    {
-      "versao": "1.0.4",
-      "instalador": "ConsultaSimplesNacional-1.0.4-setup.exe",
-      "sha256": "a1b2c3...",
-      "notas": "Corrige X e Y.",
-      "publicado_em": "2026-09-02"
-    }
-
-Nada aqui levanta excecao: sem o Drive montado, sem a pasta ou com o manifesto
-quebrado, o sistema apenas nao avisa nada. Aviso de atualizacao nunca pode
-atrapalhar quem so quer consultar CNPJ.
+Nada aqui levanta excecao: sem internet, com a API fora do ar ou com o release
+sem instalador anexado, o sistema apenas nao avisa nada. Aviso de atualizacao
+nunca pode atrapalhar quem so quer consultar CNPJ.
 """
 from __future__ import annotations
 
@@ -25,18 +17,21 @@ import hashlib
 import json
 import os
 import re
-from dataclasses import dataclass, field
+import ssl
+import tempfile
+import urllib.error
+import urllib.request
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
 from . import config
 from .versao import VERSAO
 
-NOME_MANIFESTO = "versao.json"
+# Sufixo do arquivo anexado ao release que interessa ao sistema.
+SUFIXO_INSTALADOR = "-setup.exe"
 
-# Tamanho maximo aceito para o instalador anunciado. Serve de sanidade: o
-# manifesto e um arquivo de pasta compartilhada, e alguem pode trocar o que
-# esta la por engano.
+# Sanidade para o anexo anunciado pela API.
 _LIMITE_INSTALADOR = 400 * 1024 * 1024
 
 
@@ -52,13 +47,15 @@ def e_mais_nova(candidata: str, atual: str = VERSAO) -> bool:
 
 @dataclass
 class Atualizacao:
-    """O que o manifesto anuncia, ja conferido contra a versao instalada."""
+    """O que o release anuncia, ja conferido contra a versao instalada."""
 
     versao: str = ""
     notas: str = ""
     publicado_em: str = ""
-    instalador: Optional[Path] = None
-    sha256: str = ""
+    url_instalador: str = ""
+    tamanho: int = 0
+    pagina: str = ""
+    baixado: Optional[Path] = None
     problema: str = ""
 
     @property
@@ -67,8 +64,8 @@ class Atualizacao:
 
     @property
     def instalavel(self) -> bool:
-        """Ha versao nova E o instalador dela esta acessivel agora."""
-        return self.disponivel and self.instalador is not None
+        """Ha versao nova E ela tem instalador anexado ao release."""
+        return self.disponivel and bool(self.url_instalador)
 
     def como_dicionario(self) -> dict:
         return {
@@ -76,79 +73,77 @@ class Atualizacao:
             "versao": self.versao,
             "notas": self.notas,
             "publicado_em": self.publicado_em,
+            "pagina": self.pagina,
             "disponivel": self.disponivel,
             "instalavel": self.instalavel,
             "problema": self.problema,
         }
 
 
-def _pasta(origem=None) -> Optional[Path]:
-    escolhida = origem if origem is not None else config.PASTA_ATUALIZACAO
-    if not escolhida:
-        return None
-    try:
-        return Path(escolhida)
-    except (TypeError, ValueError):
-        return None
+def _abrir(url: str, timeout: int):
+    pedido = urllib.request.Request(
+        url,
+        headers={
+            "Accept": "application/vnd.github+json",
+            "User-Agent": f"ConsultaSimplesNacional/{VERSAO}",
+            "X-GitHub-Api-Version": "2022-11-28",
+        },
+    )
+    return urllib.request.urlopen(pedido, timeout=timeout, context=ssl.create_default_context())
 
 
-def _instalador_do_manifesto(pasta: Path, dados: dict) -> Optional[Path]:
-    """Resolve o instalador anunciado, so dentro da pasta do manifesto.
+def _instalador_do_release(dados: dict) -> tuple:
+    """Escolhe o anexo do instalador entre os arquivos do release.
 
-    O campo e um nome de arquivo simples, nunca caminho nem endereco: assim um
-    manifesto adulterado - por engano ou nao - nao consegue apontar o sistema
-    para um executavel qualquer da maquina ou da rede.
+    So aceita endereco do proprio dominio de downloads do GitHub: assim um
+    release adulterado nao consegue apontar o sistema para outro servidor.
     """
-    nome = str(dados.get("instalador") or "").strip()
-    if not nome or "/" in nome or "\\" in nome or nome in (".", ".."):
-        return None
-    candidato = pasta / nome
-    try:
-        if not candidato.is_file():
-            return None
-        if candidato.stat().st_size > _LIMITE_INSTALADOR:
-            return None
-        # Confere que o arquivo resolvido continua dentro da pasta anunciada.
-        if candidato.resolve().parent != pasta.resolve():
-            return None
-    except OSError:
-        return None
-    return candidato
+    for anexo in dados.get("assets") or []:
+        nome = str(anexo.get("name") or "")
+        url = str(anexo.get("browser_download_url") or "")
+        tamanho = int(anexo.get("size") or 0)
+        if not nome.lower().endswith(SUFIXO_INSTALADOR):
+            continue
+        if not url.startswith("https://github.com/"):
+            continue
+        if tamanho <= 0 or tamanho > _LIMITE_INSTALADOR:
+            continue
+        return url, tamanho
+    return "", 0
 
 
-def verificar(origem=None) -> Atualizacao:
-    """Le o manifesto e diz se ha versao nova. Nunca levanta excecao."""
-    pasta = _pasta(origem)
-    if pasta is None:
+def verificar(repositorio: str = None, timeout: int = None) -> Atualizacao:
+    """Le o release mais recente e diz se ha versao nova. Nunca levanta excecao."""
+    repositorio = repositorio if repositorio is not None else config.REPOSITORIO
+    if not repositorio:
         return Atualizacao()
+    timeout = timeout if timeout is not None else config.TIMEOUT_ATUALIZACAO
 
+    url = f"https://api.github.com/repos/{repositorio}/releases/latest"
     try:
-        bruto = (pasta / NOME_MANIFESTO).read_text(encoding="utf-8")
-    except OSError:
-        # Drive nao montado, pasta ausente, sem permissao: silencio e o certo.
+        with _abrir(url, timeout) as resposta:
+            dados = json.loads(resposta.read().decode("utf-8"))
+    except (urllib.error.URLError, OSError, ValueError, TimeoutError):
+        # Sem internet, atras de proxy, API fora do ar: silencio e o certo.
         return Atualizacao()
-
-    try:
-        dados = json.loads(bruto)
-    except (ValueError, TypeError):
-        return Atualizacao(problema="o manifesto de versao esta ilegivel")
     if not isinstance(dados, dict):
-        return Atualizacao(problema="o manifesto de versao esta ilegivel")
+        return Atualizacao()
 
+    etiqueta = str(dados.get("tag_name") or "").strip()
     atualizacao = Atualizacao(
-        versao=str(dados.get("versao") or "").strip(),
-        notas=str(dados.get("notas") or "").strip(),
-        publicado_em=str(dados.get("publicado_em") or "").strip(),
-        sha256=str(dados.get("sha256") or "").strip().lower(),
+        versao=etiqueta.lstrip("vV"),
+        notas=str(dados.get("body") or "").strip()[:400],
+        publicado_em=str(dados.get("published_at") or "")[:10],
+        pagina=str(dados.get("html_url") or ""),
     )
     if not atualizacao.disponivel:
         return atualizacao
 
-    atualizacao.instalador = _instalador_do_manifesto(pasta, dados)
-    if atualizacao.instalador is None:
+    atualizacao.url_instalador, atualizacao.tamanho = _instalador_do_release(dados)
+    if not atualizacao.url_instalador:
         atualizacao.problema = (
-            f"a versao {atualizacao.versao} foi anunciada, mas o instalador dela "
-            f"nao esta na pasta de atualizacao"
+            f"a versao {atualizacao.versao} foi publicada, mas o release nao traz "
+            f"o instalador anexado"
         )
     return atualizacao
 
@@ -162,36 +157,45 @@ def impressao_digital(caminho: Path) -> str:
     return resumo.hexdigest()
 
 
-def conferir(atualizacao: Atualizacao) -> str:
-    """Confere o instalador contra o SHA-256 do manifesto.
+def baixar(atualizacao: Atualizacao) -> str:
+    """Baixa o instalador do release para uma pasta temporaria.
 
-    Devolve "" quando esta tudo certo, ou a mensagem do problema. Enquanto nao
-    houver certificado de code signing, esta e a unica prova de que o arquivo
-    que vai rodar e o que foi publicado.
+    Devolve "" quando deu certo, ou a mensagem do problema. O arquivo so e
+    aceito se vier do dominio do GitHub e tiver o tamanho anunciado pela API -
+    a conferencia mais barata contra download truncado.
     """
-    if atualizacao.instalador is None:
-        return "o instalador da versao nova nao foi encontrado"
-    if not atualizacao.sha256:
-        return "o manifesto nao trouxe o SHA-256 do instalador"
+    if not atualizacao.url_instalador:
+        return "esta versao nao tem instalador publicado"
+    if not atualizacao.url_instalador.startswith("https://github.com/"):
+        return "o endereco do instalador nao e do GitHub"
+
+    destino = Path(tempfile.gettempdir()) / f"ConsultaSimplesNacional-{atualizacao.versao}-setup.exe"
     try:
-        obtido = impressao_digital(atualizacao.instalador)
-    except OSError as erro:
-        return f"nao foi possivel ler o instalador: {erro}"
-    if obtido != atualizacao.sha256:
-        return (
-            "o instalador na pasta compartilhada nao confere com o SHA-256 "
-            "publicado no manifesto - a atualizacao foi interrompida"
-        )
+        with _abrir(atualizacao.url_instalador, config.TIMEOUT_DOWNLOAD) as resposta:
+            with open(destino, "wb") as arquivo:
+                while bloco := resposta.read(1024 * 1024):
+                    arquivo.write(bloco)
+    except (urllib.error.URLError, OSError, TimeoutError) as erro:
+        return f"nao foi possivel baixar o instalador: {erro}"
+
+    if atualizacao.tamanho and destino.stat().st_size != atualizacao.tamanho:
+        try:
+            destino.unlink()
+        except OSError:
+            pass
+        return "o download do instalador veio incompleto - a atualizacao foi interrompida"
+
+    atualizacao.baixado = destino
     return ""
 
 
 def abrir_instalador(atualizacao: Atualizacao) -> str:
-    """Confere a integridade e abre o instalador. Devolve "" se deu certo."""
-    problema = conferir(atualizacao)
+    """Baixa e abre o instalador da versao nova. Devolve "" se deu certo."""
+    problema = baixar(atualizacao)
     if problema:
         return problema
     try:
-        os.startfile(str(atualizacao.instalador))  # noqa: S606 - Windows
+        os.startfile(str(atualizacao.baixado))  # noqa: S606 - Windows
     except OSError as erro:
         return f"nao foi possivel abrir o instalador: {erro}"
     return ""

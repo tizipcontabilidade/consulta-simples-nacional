@@ -74,38 +74,17 @@ if ($Versao) { $parametros = @("/DVersao=$Versao") + $parametros }
 & $iscc @parametros | Select-Object -Last 3
 if ($LASTEXITCODE -ne 0) { throw "Inno Setup falhou" }
 
-Write-Host "5/5  Gerando o manifesto de versao..." -ForegroundColor Cyan
+Write-Host "5/5  Preparando a publicacao..." -ForegroundColor Cyan
 $setup = Join-Path $raiz "instalador\ConsultaSimplesNacional-$Versao-setup.exe"
 if (-not (Test-Path $setup)) { throw "instalador nao encontrado: $setup" }
 $hash = (Get-FileHash $setup -Algorithm SHA256).Hash.ToLower()
-$notas = ""
-if (Test-Path "CHANGELOG.md") {
-    # Primeiro item da secao da versao atual, so para a faixa da tela.
-    $linhas = Get-Content CHANGELOG.md
-    $inicio = ($linhas | Select-String -Pattern "^## \[$([regex]::Escape($Versao))\]" | Select-Object -First 1)
-    if ($inicio) {
-        $notas = ($linhas[$inicio.LineNumber..($inicio.LineNumber + 12)] |
-                  Where-Object { $_ -match "^- \*\*" } |
-                  Select-Object -First 1) -replace "^- \*\*", "" -replace "\*\*", ""
-    }
-}
-$manifesto = [ordered]@{
-    versao       = $Versao
-    instalador   = Split-Path $setup -Leaf
-    sha256       = $hash
-    notas        = $notas
-    publicado_em = (Get-Date -Format "yyyy-MM-dd")
-}
-$destino = Join-Path $raiz "instaladorersao.json"
-$manifesto | ConvertTo-Json | Out-File $destino -Encoding utf8
-Write-Host "     $destino"
 
 Write-Host ""
 Write-Host "Pronto." -ForegroundColor Green
-Get-ChildItem instalador\*.exe | ForEach-Object {
-    "{0}  ({1:N0} MB)" -f $_.FullName, ($_.Length / 1MB)
-}
+"{0}  ({1:N0} MB)" -f $setup, ((Get-Item $setup).Length / 1MB)
+Write-Host "SHA-256: $hash"
 Write-Host ""
-Write-Host "Para publicar: copie o setup.exe e o versao.json para" -ForegroundColor Yellow
-Write-Host "    $env:CSN_ATUALIZACAO" -ForegroundColor Yellow
-Write-Host "  (padrao: G:\Drives compartilhados\Tecnologia da Informacao\ConsultaSimplesNacional)" -ForegroundColor Yellow
+Write-Host "Para publicar o release (e com isso avisar a equipe):" -ForegroundColor Yellow
+Write-Host "    gh release create v$Versao `"$setup`" --title `"v$Versao`" --notes-file CHANGELOG.md"
+Write-Host ""
+Write-Host "O sistema instalado consulta o release mais recente e oferece a atualizacao." -ForegroundColor Yellow

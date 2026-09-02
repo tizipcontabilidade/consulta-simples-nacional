@@ -1,0 +1,11 @@
+# Normaliza fim de linha: o repositorio guarda LF, o Windows recebe CRLF.
+* text=auto eol=lf
+
+*.ps1   text eol=crlf
+*.bat   text eol=crlf
+*.iss   text eol=crlf
+
+*.png   binary
+*.ico   binary
+*.exe   binary
+*.xlsx  binary

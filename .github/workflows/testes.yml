@@ -1,0 +1,31 @@
+name: testes
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  pytest:
+    # O sistema so roda em Windows (navegador local, PyInstaller, Inno Setup),
+    # entao a suite roda no mesmo sistema em que o produto vive.
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Instalar dependencias
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt -r requirements-dev.txt
+
+      - name: Rodar a suite
+        # Nenhum teste toca o portal da Receita nem a API do GitHub: ambos sao
+        # dublados. A suite roda sem rede.
+        run: python -m pytest -q
