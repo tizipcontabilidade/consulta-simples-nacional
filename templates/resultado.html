@@ -24,8 +24,28 @@
     {{ em_dia|length }} em dia &middot;
     {{ mudaram|length }} com mudanca desde a ultima consulta
     {% if execucao.cancelado %} &middot; <strong>lote cancelado</strong>{% endif %}
+    {% if descartados %} &middot;
+    <strong>{{ descartados|length }} entrada(s) nao consultada(s)</strong>{% endif %}
   </p>
 </section>
+
+{% if descartados %}
+<section class="cartao destaque">
+  <h2>Nao entraram na consulta <span class="ajuda">({{ descartados|length }})</span></h2>
+  <p class="ajuda">
+    Lidas do arquivo ou da lista colada, mas nao consultadas. Confira uma a uma:
+    aqui e onde um cliente sumiria do lote sem ninguem perceber.
+  </p>
+  <table class="compacta">
+    <thead><tr><th>Como veio</th><th>Por que ficou de fora</th></tr></thead>
+    <tbody>
+      {% for descartado in descartados %}
+      <tr><td>{{ descartado.bruto }}</td><td>{{ descartado.motivo }}</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endif %}
 
 {% if mudaram %}
 <section class="cartao destaque">

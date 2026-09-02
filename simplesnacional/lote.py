@@ -10,46 +10,220 @@ from typing import Callable, Iterable, Optional
 
 from . import config, historico
 from .analise import EM_DIA, Veredito, avaliar, ordenar
-from .parser import Consulta, analisar, formatar_cnpj, somente_digitos
+from .parser import (
+    Consulta,
+    analisar,
+    formatar_cnpj,
+    normalizar_cnpj,
+    somente_digitos,
+)
 from .scraper import Sessao, pausa_entre_consultas
 
 
-# CNPJ completo (com ou sem pontuacao) ou o caso de 13 digitos, que aparece
-# quando a planilha guardou o CNPJ como numero e comeu o zero a esquerda.
-_PADRAO_CNPJ = r"(?<!\d)(?:\d{2}\.?\d{3}\.?\d{3}/?\d{4}-?\d{2}|\d{13})(?!\d)"
+# Qualquer sequencia continua de caracteres de documento. E de proposito mais
+# larga que a mascara oficial: o que nao virar consulta precisa aparecer no
+# relatorio, e para aparecer precisa antes ser visto. Letras entram porque o
+# CNPJ e alfanumerico desde julho de 2026; um pedaco sem digito nenhum e
+# palavra, nao documento, e cai fora logo na entrada.
+_PADRAO_CANDIDATO = re.compile(r"[0-9A-Za-z][0-9A-Za-z./-]*[0-9A-Za-z]|[0-9]")
+
+# Estrutura do CNPJ alfanumerico (IN RFB 2.229/2024): 8 posicoes de raiz e 4 de
+# ordem do estabelecimento, todas alfanumericas, e 2 digitos verificadores que
+# continuam obrigatoriamente numericos.
+_ESTRUTURA_CNPJ = re.compile(r"^[0-9A-Z]{12}[0-9]{2}$")
+
+# CAEPF (produtor rural e demais pessoas fisicas equiparadas) tem 14 digitos,
+# como o CNPJ, mas mascara propria: 3.3.3/3-2 contra 2.3.3/4-2 do CNPJ. A
+# distincao e pela mascara, nao pelo digito verificador - o DV do CAEPF nao
+# fecha por modulo 11 e nao ha como conferi-lo aqui. Sem pontuacao os dois sao
+# indistinguiveis, e ai o numero segue como CNPJ e sai marcado como invalido.
+_MASCARA_CAEPF = re.compile(r"^\d{3}\.\d{3}\.\d{3}/\d{3}-\d{2}$")
+
+# CPF ainda aparece no lugar do CNPJ em parte da carteira exportada.
+_MASCARA_CPF = re.compile(r"^\d{3}\.\d{3}\.\d{3}-\d{2}$")
+
+# Abaixo disso um numero solto e telefone, CEP, data ou codigo interno - ruido
+# de planilha que nao merece aviso. De 12 caracteres para cima ja parece
+# documento truncado, e ai o silencio custa caro.
+_TAMANHO_SUSPEITO = 12
+
+MOTIVO_CAEPF = "CAEPF (pessoa fisica): o portal do Simples Nacional so consulta CNPJ"
+MOTIVO_CPF = "CPF (pessoa fisica): o portal do Simples Nacional so consulta CNPJ"
+MOTIVO_DV_13 = "13 digitos: nem recolocando o zero a esquerda o digito verificador fecha"
+MOTIVO_TAMANHO = "nao tem os 14 caracteres de um CNPJ"
+MOTIVO_ESTRUTURA = "os dois ultimos caracteres do CNPJ tem de ser numericos"
+MOTIVO_DV_ALFANUMERICO = (
+    "14 caracteres com letra, mas o digito verificador nao fecha: "
+    "parece codigo interno, nao CNPJ"
+)
+MOTIVO_REPETIDO = "repetido na lista"
 
 
-def extrair_cnpjs(texto: str) -> list:
-    """Extrai CNPJs de texto livre (colado, CSV, uma por linha...), sem repetir.
+@dataclass
+class Descartado:
+    """Uma entrada que nao virou consulta, e o porque."""
+
+    bruto: str
+    motivo: str
+
+    def como_dicionario(self) -> dict:
+        return {"bruto": self.bruto, "motivo": self.motivo}
+
+
+@dataclass
+class Leitura:
+    """O que a importacao aproveitou e o que deixou de fora.
+
+    Existe para uma conta poder ser conferida: o total lido tem de bater com o
+    total consultado mais o total descartado. Lote que encolhe sem explicacao e
+    a pior falha possivel aqui - o cliente some e ninguem fica sabendo.
+    """
+
+    cnpjs: list = field(default_factory=list)
+    descartados: list = field(default_factory=list)
+
+    @property
+    def total_lido(self) -> int:
+        return len(self.cnpjs) + len(self.descartados)
+
+    def mesclar(self, outra: "Leitura") -> "Leitura":
+        """Junta outra leitura, marcando como repetido o que ja estava aqui."""
+        for cnpj in outra.cnpjs:
+            if cnpj in self.cnpjs:
+                self.descartados.append(Descartado(formatar_cnpj(cnpj), MOTIVO_REPETIDO))
+            else:
+                self.cnpjs.append(cnpj)
+        self.descartados.extend(outra.descartados)
+        return self
+
+    def como_dicionario(self) -> dict:
+        return {
+            "total_lido": self.total_lido,
+            "aproveitados": len(self.cnpjs),
+            "descartados": [d.como_dicionario() for d in self.descartados],
+        }
+
+
+def _e_cpf(bruto: str, digitos: str) -> bool:
+    """CPF pela mascara, ou 11 digitos crus cujo DV de CPF fecha.
+
+    Exigir o DV quando vem sem pontuacao evita confundir telefone com CPF.
+    """
+    if _MASCARA_CPF.match(bruto):
+        return True
+    return len(digitos) == 11 and bruto.isdigit() and validar_cpf(digitos)
+
+
+def ler(texto: str) -> Leitura:
+    """Le CNPJs de texto livre guardando tambem o que nao foi aproveitado.
 
     Um numero de 13 digitos so entra se, com o zero a esquerda de volta, os
     digitos verificadores fecharem - o preenchimento e um palpite, e o palpite
-    precisa de prova.
+    precisa de prova. Ja um CNPJ de 14 caracteres bem formado entra mesmo com o
+    digito verificador errado: o lote o marca como invalido e ele aparece no
+    resultado, que e melhor do que sumir na importacao.
     """
-    limpos = []
-    for bruto in re.findall(_PADRAO_CNPJ, texto or ""):
+    leitura = Leitura()
+    for bruto in _PADRAO_CANDIDATO.findall(texto or ""):
+        if not any(c.isdigit() for c in bruto):
+            continue  # palavra solta, nao documento
+
+        if _MASCARA_CAEPF.match(bruto):
+            leitura.descartados.append(Descartado(bruto, MOTIVO_CAEPF))
+            continue
+
         digitos = somente_digitos(bruto)
-        if len(digitos) == 13:
-            candidato = digitos.zfill(14)
+        if _e_cpf(bruto, digitos):
+            leitura.descartados.append(Descartado(bruto, MOTIVO_CPF))
+            continue
+
+        limpo = normalizar_cnpj(bruto)
+
+        # Planilha que guarda o CNPJ como numero come o zero a esquerda. So se
+        # aplica a CNPJ inteiramente numerico: celula com letra nao vira numero.
+        if len(limpo) == 13 and limpo.isdigit():
+            candidato = limpo.zfill(14)
             if not validar_cnpj(candidato):
+                leitura.descartados.append(Descartado(bruto, MOTIVO_DV_13))
                 continue
-            digitos = candidato
-        if len(digitos) == 14 and digitos not in limpos:
-            limpos.append(digitos)
-    return limpos
+            limpo = candidato
+
+        if len(limpo) != 14:
+            # Aviso so para numero puro truncado, que e o defeito real ja visto.
+            # Codigo com letra e do tamanho errado e codigo interno de planilha,
+            # nao CNPJ mutilado - avisar sobre ele treinaria a equipe a ignorar
+            # a lista de descartes, que e justamente o que nao pode acontecer.
+            if limpo.isdigit() and len(limpo) >= _TAMANHO_SUSPEITO:
+                leitura.descartados.append(Descartado(bruto, MOTIVO_TAMANHO))
+            continue
+
+        if not _ESTRUTURA_CNPJ.match(limpo):
+            leitura.descartados.append(Descartado(bruto, MOTIVO_ESTRUTURA))
+            continue
+
+        # CNPJ numerico de 14 digitos com DV errado entra assim mesmo: em lista
+        # de clientes e quase sempre CNPJ com erro de digitacao, e merece uma
+        # linha propria no resultado. Ja um codigo com letra do tamanho certo
+        # (PROTOCOLO12345 e da forma de um CNPJ) so entra se o DV provar que e
+        # CNPJ - senao vira descarte, relatado mas fora da consulta.
+        if not limpo.isdigit() and not validar_cnpj(limpo):
+            leitura.descartados.append(Descartado(bruto, MOTIVO_DV_ALFANUMERICO))
+            continue
+
+        if limpo in leitura.cnpjs:
+            leitura.descartados.append(Descartado(bruto, MOTIVO_REPETIDO))
+            continue
+
+        leitura.cnpjs.append(limpo)
+    return leitura
+
+
+def extrair_cnpjs(texto: str) -> list:
+    """So os CNPJs aproveitados; use ler() para saber o que ficou de fora."""
+    return ler(texto).cnpjs
+
+
+def _valor(caractere: str) -> int:
+    """Valor do caractere no calculo do DV: codigo ASCII menos 48.
+
+    Digitos ficam com o proprio valor (0-9) e letras seguem de A=17 a Z=42.
+    E por isso que o CNPJ numerico antigo continua validando exatamente como
+    sempre validou - a regra nova e uma extensao da antiga, nao uma troca.
+    """
+    return ord(caractere) - 48
 
 
 def validar_cnpj(cnpj: str) -> bool:
-    """Validacao dos dois digitos verificadores."""
-    digitos = somente_digitos(cnpj)
-    if len(digitos) != 14 or len(set(digitos)) == 1:
+    """Validacao dos dois digitos verificadores, numerico ou alfanumerico.
+
+    Modulo 11 com os mesmos pesos de sempre; muda so a conversao do caractere
+    em numero. Conferido contra o exemplo da Receita: 12.ABC.345/01DE-35.
+    """
+    limpo = normalizar_cnpj(cnpj)
+    if not _ESTRUTURA_CNPJ.match(limpo) or len(set(limpo)) == 1:
         return False
-    numeros = [int(d) for d in digitos]
+    valores = [_valor(c) for c in limpo]
     for tamanho in (12, 13):
         pesos = list(range(tamanho - 7, 1, -1)) + list(range(9, 1, -1))
-        soma = sum(n * p for n, p in zip(numeros[:tamanho], pesos))
+        soma = sum(v * p for v, p in zip(valores[:tamanho], pesos))
         resto = soma % 11
         esperado = 0 if resto < 2 else 11 - resto
+        if valores[tamanho] != esperado:
+            return False
+    return True
+
+
+def validar_cpf(cpf: str) -> bool:
+    """Validacao dos dois digitos verificadores do CPF."""
+    digitos = somente_digitos(cpf)
+    if len(digitos) != 11 or len(set(digitos)) == 1:
+        return False
+    numeros = [int(d) for d in digitos]
+    for tamanho in (9, 10):
+        pesos = range(tamanho + 1, 1, -1)
+        soma = sum(n * p for n, p in zip(numeros[:tamanho], pesos))
+        resto = (soma * 10) % 11
+        esperado = 0 if resto == 10 else resto
         if numeros[tamanho] != esperado:
             return False
     return True
@@ -90,6 +264,9 @@ class Execucao:
 
     cnpjs: list
     itens: list = field(default_factory=list)
+    # Entradas lidas na importacao que nao viraram consulta. Viajam junto com o
+    # lote para aparecerem na tela e na exportacao, nunca em silencio.
+    descartados: list = field(default_factory=list)
     indice: int = 0
     mensagem: str = "Aguardando inicio."
     aguardando_captcha: bool = False
@@ -137,6 +314,7 @@ class Execucao:
             "erro_fatal": self.erro_fatal,
             "contagem": self.contagem(),
             "com_mudanca": len(self.com_mudanca()),
+            "descartados": [d.como_dicionario() for d in self.descartados],
             "itens": [i.como_dicionario() for i in self.itens],
         }
 
@@ -150,7 +328,7 @@ def executar(
     ao_progredir: Optional[Callable[[Execucao], None]] = None,
 ) -> Execucao:
     """Consulta a lista de CNPJs em sequencia, reaproveitando uma unica sessao."""
-    lista = [somente_digitos(c) for c in cnpjs]
+    lista = [normalizar_cnpj(c) for c in cnpjs]
     execucao = execucao or Execucao(cnpjs=lista)
     execucao.cnpjs = lista
 
@@ -251,6 +429,7 @@ def salvar_json(execucao: Execucao, caminho) -> None:
         "gerado_em": datetime.now().isoformat(timespec="seconds"),
         "total": execucao.total,
         "contagem": execucao.contagem(),
+        "descartados": [d.como_dicionario() for d in execucao.descartados],
         "resultados": [i.como_dicionario() for i in execucao.resultados_ordenados()],
     }
     caminho.write_text(json.dumps(dados, ensure_ascii=False, indent=2), encoding="utf-8")

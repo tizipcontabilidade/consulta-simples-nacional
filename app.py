@@ -79,7 +79,7 @@ def _porta_ocupada(porta: int) -> bool:
 
 
 # --------------------------------------------------------------------- leitura
-def _cnpjs_de_planilha(arquivo) -> list:
+def _cnpjs_de_planilha(arquivo) -> lote.Leitura:
     """Le CNPJs de um .xlsx enviado (qualquer coluna, qualquer aba)."""
     from openpyxl import load_workbook
 
@@ -90,31 +90,28 @@ def _cnpjs_de_planilha(arquivo) -> list:
             for celula in linha:
                 if celula is not None:
                     textos.append(str(celula))
-    return lote.extrair_cnpjs("\n".join(textos))
+    return lote.ler("\n".join(textos))
 
 
-def _cnpjs_do_pedido() -> list:
-    encontrados = lote.extrair_cnpjs(request.form.get("cnpjs", ""))
+def _cnpjs_do_pedido() -> lote.Leitura:
+    """Junta o que foi colado com o que veio de arquivo, guardando o descarte."""
+    leitura = lote.ler(request.form.get("cnpjs", ""))
 
     arquivo = request.files.get("arquivo")
     if arquivo and arquivo.filename:
         nome = arquivo.filename.lower()
         if nome.endswith((".xlsx", ".xlsm")):
-            encontrados += _cnpjs_de_planilha(arquivo)
+            leitura.mesclar(_cnpjs_de_planilha(arquivo))
         else:
             bruto = arquivo.read()
             for codificacao in ("utf-8-sig", "latin-1"):
                 try:
-                    encontrados += lote.extrair_cnpjs(bruto.decode(codificacao))
+                    leitura.mesclar(lote.ler(bruto.decode(codificacao)))
                     break
                 except UnicodeDecodeError:
                     continue
 
-    unicos = []
-    for cnpj in encontrados:
-        if cnpj not in unicos:
-            unicos.append(cnpj)
-    return unicos
+    return leitura
 
 
 # ---------------------------------------------------------------------- rotas
@@ -127,19 +124,20 @@ def inicio():
 def consultar():
     global _atual, _thread
 
-    cnpjs = _cnpjs_do_pedido()
-    if not cnpjs:
+    leitura = _cnpjs_do_pedido()
+    if not leitura.cnpjs:
         return render_template(
             "index.html",
             execucao=None,
             aviso="Nenhum CNPJ valido encontrado. Cole a lista ou envie um arquivo .txt, .csv ou .xlsx.",
+            descartados=leitura.descartados,
         )
 
     with _trava:
         if _thread and _thread.is_alive():
             return redirect(url_for("andamento"))
 
-        _atual = lote.Execucao(cnpjs=cnpjs)
+        _atual = lote.Execucao(cnpjs=leitura.cnpjs, descartados=leitura.descartados)
         visivel = request.form.get("visivel") == "on"
         todos_comprovantes = request.form.get("comprovante_todos") == "on"
 
@@ -196,6 +194,7 @@ def resultado():
         mudaram=mudaram,
         rotulos=ROTULOS,
         ordem=ORDEM,
+        descartados=_atual.descartados,
     )
 
 
@@ -205,15 +204,16 @@ def baixar(formato: str):
         return redirect(url_for("inicio"))
 
     itens = [i.como_dicionario() for i in _atual.resultados_ordenados()]
+    descartados = [d.como_dicionario() for d in _atual.descartados]
     config.PASTA_SAIDA.mkdir(parents=True, exist_ok=True)
     carimbo = datetime.now().strftime("%Y%m%d-%H%M%S")
 
     if formato == "xlsx":
         caminho = config.PASTA_SAIDA / f"simples-nacional-{carimbo}.xlsx"
-        exportar.gerar_excel(itens, caminho)
+        exportar.gerar_excel(itens, caminho, descartados)
     elif formato == "csv":
         caminho = config.PASTA_SAIDA / f"simples-nacional-{carimbo}.csv"
-        exportar.gerar_csv(itens, caminho)
+        exportar.gerar_csv(itens, caminho, descartados)
     elif formato == "json":
         caminho = config.PASTA_SAIDA / f"simples-nacional-{carimbo}.json"
         lote.salvar_json(_atual, caminho)

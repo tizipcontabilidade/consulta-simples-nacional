@@ -23,7 +23,7 @@ from simplesnacional import config, exportar, historico, lote
 from simplesnacional.analise import EM_DIA
 
 
-def _ler_arquivo(caminho: Path) -> list:
+def _ler_arquivo(caminho: Path) -> lote.Leitura:
     if caminho.suffix.lower() in (".xlsx", ".xlsm"):
         from openpyxl import load_workbook
 
@@ -32,14 +32,14 @@ def _ler_arquivo(caminho: Path) -> list:
         for aba in planilha.worksheets:
             for linha in aba.iter_rows(values_only=True):
                 textos += [str(c) for c in linha if c is not None]
-        return lote.extrair_cnpjs("\n".join(textos))
+        return lote.ler("\n".join(textos))
 
     for codificacao in ("utf-8-sig", "latin-1"):
         try:
-            return lote.extrair_cnpjs(caminho.read_text(encoding=codificacao))
+            return lote.ler(caminho.read_text(encoding=codificacao))
         except UnicodeDecodeError:
             continue
-    return []
+    return lote.Leitura()
 
 
 def _argumentos():
@@ -73,13 +73,26 @@ def _argumentos():
 def main() -> int:
     argumentos = _argumentos()
 
-    cnpjs = lote.extrair_cnpjs(" ".join(argumentos.cnpjs))
+    leitura = lote.ler(" ".join(argumentos.cnpjs))
     if argumentos.arquivo:
         if not argumentos.arquivo.exists():
             print(f"arquivo nao encontrado: {argumentos.arquivo}", file=sys.stderr)
             return 2
-        cnpjs += [c for c in _ler_arquivo(argumentos.arquivo) if c not in cnpjs]
+        leitura.mesclar(_ler_arquivo(argumentos.arquivo))
 
+    # O que foi lido e nao virou consulta sai antes do lote comecar: numero que
+    # entrou tem de bater com numero que saiu.
+    if leitura.descartados:
+        print(
+            f"{leitura.total_lido} entrada(s) lida(s); "
+            f"{len(leitura.descartados)} nao sera(ao) consultada(s):",
+            file=sys.stderr,
+        )
+        for descartado in leitura.descartados:
+            print(f"  {descartado.bruto}  ->  {descartado.motivo}", file=sys.stderr)
+        print(file=sys.stderr)
+
+    cnpjs = leitura.cnpjs
     if not cnpjs:
         print("nenhum CNPJ valido informado", file=sys.stderr)
         return 2
@@ -90,6 +103,7 @@ def main() -> int:
 
     execucao = lote.executar(
         cnpjs,
+        execucao=lote.Execucao(cnpjs=cnpjs, descartados=leitura.descartados),
         visivel=not argumentos.oculto,
         usar_historico=not argumentos.sem_historico,
         ao_progredir=progresso,
@@ -104,6 +118,7 @@ def main() -> int:
         itens = [i for i in itens if i.get("situacao_historico") == historico.MUDOU]
 
     relevantes = [i for i in itens if i.get("status") != EM_DIA]
+    descartados = [d.como_dicionario() for d in execucao.descartados]
 
     print()
     print(f"{execucao.total} CNPJ(s) consultado(s) em {datetime.now():%d/%m/%Y %H:%M}")
@@ -130,9 +145,9 @@ def main() -> int:
         carimbo = datetime.now().strftime("%Y%m%d-%H%M%S")
         caminho = pasta / f"simples-nacional-{carimbo}.{argumentos.formato}"
         if argumentos.formato == "xlsx":
-            exportar.gerar_excel(itens, caminho)
+            exportar.gerar_excel(itens, caminho, descartados)
         elif argumentos.formato == "csv":
-            exportar.gerar_csv(itens, caminho)
+            exportar.gerar_csv(itens, caminho, descartados)
         else:
             lote.salvar_json(execucao, caminho)
         print()

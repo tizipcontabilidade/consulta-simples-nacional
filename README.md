@@ -32,6 +32,21 @@ Baixe a versão mais recente em
 3. Cole os CNPJs (um por linha, com ou sem pontuação) ou envie um `.txt`,
    `.csv` ou `.xlsx`. O sistema varre o arquivo inteiro e recolhe todo CNPJ
    válido que encontrar, sem repetir.
+
+   **Nada é descartado em silêncio.** O que foi lido e não vira consulta sai
+   listado com o motivo, na tela e no relatório, em **Não consultados** — o
+   total lido sempre bate com consultados + não consultados. Cai nessa lista:
+
+   | Entrada | Por quê |
+   |---|---|
+   | CPF (`NNN.NNN.NNN-NN`) | o portal só consulta CNPJ |
+   | CAEPF (`NNN.NNN.NNN/NNN-NN`) | pessoa física; o portal só consulta CNPJ |
+   | Número truncado (12–13 dígitos) | não fecha como CNPJ nem recolocando o zero à esquerda |
+   | CNPJ repetido | já estava na lista |
+
+   O CNPJ **alfanumérico** (letras nas 12 primeiras posições, em vigor desde
+   julho de 2026) é aceito normalmente, com ou sem pontuação e em maiúsculas ou
+   minúsculas. Os dois dígitos verificadores continuam numéricos.
 4. Para fechar: botão **Encerrar** no topo, ou simplesmente feche a aba.
 
 ### Como o sistema é encerrado

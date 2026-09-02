@@ -35,6 +35,11 @@ CABECALHO_OCORRENCIAS = [
     "Comprovante",
 ]
 
+CABECALHO_DESCARTADOS = [
+    "Como veio na origem",
+    "Por que nao foi consultado",
+]
+
 _CORES = {
     ERRO: "F8CBAD",
     ALERTA: "F4B6B6",
@@ -119,8 +124,8 @@ def _formatar_aba(aba, cabecalho: list, larguras: list) -> None:
     aba.auto_filter.ref = f"A1:{get_column_letter(len(cabecalho))}1"
 
 
-def gerar_excel(resultados: list, caminho) -> None:
-    """Grava a planilha com as abas Resumo e Ocorrencias."""
+def gerar_excel(resultados: list, caminho, descartados: list = None) -> None:
+    """Grava a planilha com as abas Resumo, Ocorrencias e Nao consultados."""
     planilha = Workbook()
 
     resumo = planilha.active
@@ -140,15 +145,29 @@ def gerar_excel(resultados: list, caminho) -> None:
     if ocorrencias.max_row == 1:
         ocorrencias.append(["", "", "", "Nenhuma ocorrencia: todos os CNPJs consultados estao em dia."])
 
+    # Aba propria para o que a importacao nao aproveitou. Some da consulta,
+    # mas nao do relatorio: e por aqui que se confere se o lote encolheu.
+    nao_consultados = planilha.create_sheet("Nao consultados")
+    _formatar_aba(nao_consultados, CABECALHO_DESCARTADOS, [30, 70])
+    for descartado in descartados or []:
+        nao_consultados.append([descartado.get("bruto", ""), descartado.get("motivo", "")])
+    if nao_consultados.max_row == 1:
+        nao_consultados.append(["", "Tudo que foi lido virou consulta."])
+
     planilha.save(caminho)
 
 
-def gerar_csv(resultados: list, caminho) -> None:
+def gerar_csv(resultados: list, caminho, descartados: list = None) -> None:
     with open(caminho, "w", newline="", encoding="utf-8-sig") as arquivo:
         escritor = csv.writer(arquivo, delimiter=";")
         escritor.writerow(CABECALHO_RESUMO)
         for dados in resultados:
             escritor.writerow(_linha_resumo(dados))
+        if descartados:
+            escritor.writerow([])
+            escritor.writerow(CABECALHO_DESCARTADOS)
+            for descartado in descartados:
+                escritor.writerow([descartado.get("bruto", ""), descartado.get("motivo", "")])
 
 
 def nome_do_arquivo(prefixo: str, extensao: str) -> str:

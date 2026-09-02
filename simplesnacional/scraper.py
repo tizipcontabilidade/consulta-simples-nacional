@@ -68,11 +68,54 @@ class Sessao:
             locale="pt-BR",
             timezone_id="America/Sao_Paulo",
             viewport={"width": 1280, "height": 900},
-            args=["--disable-blink-features=AutomationControlled"],
+            args=[
+                "--disable-blink-features=AutomationControlled",
+                # Sem isto o navegador abre a guia de boas-vindas / escolha de
+                # navegador padrao por cima da consulta.
+                "--no-first-run",
+                "--no-default-browser-check",
+                "--disable-session-crashed-bubble",
+            ],
         )
         self._page = self._ctx.pages[0] if self._ctx.pages else self._ctx.new_page()
         self._page.set_default_timeout(30_000)
+        self._descartar_guias_extras()
+        self._ctx.on("page", self._ao_abrir_guia)
         return self
+
+    # ------------------------------------------------------------------ guias
+    # Guia extra (boas-vindas do navegador, restauracao de sessao, popup) rouba
+    # o foco: o hCaptcha nao renderiza o widget em guia de fundo, o clique sai
+    # sem token e o lote parece travado ate alguem fechar a guia na mao.
+    # A consulta usa uma guia so, entao qualquer outra e descartavel.
+    def _ao_abrir_guia(self, pagina) -> None:
+        if pagina is self._page:
+            return
+        try:
+            pagina.close()
+        except Exception:
+            pass
+
+    def _descartar_guias_extras(self) -> None:
+        if self._ctx is None:
+            return
+        for pagina in list(self._ctx.pages):
+            if pagina is self._page:
+                continue
+            try:
+                pagina.close()
+            except Exception:
+                pass
+
+    def _pagina(self):
+        """A guia da consulta, reaberta se alguem a tiver fechado."""
+        if self._page is not None and not self._page.is_closed():
+            return self._page
+        if self._ctx is None:
+            return None
+        self._page = self._ctx.new_page()
+        self._page.set_default_timeout(30_000)
+        return self._page
 
     def fechar(self) -> None:
         for alvo, metodo in ((self._ctx, "close"), (self._pw, "stop")):
@@ -116,12 +159,15 @@ class Sessao:
     def _tentar(self, cnpj: str) -> RespostaBruta:
         """Uma passada pelo formulario: preenche, espera o captcha carregar e envia."""
         resposta = RespostaBruta(cnpj=cnpj)
-        if self._page is None:
+        page = self._pagina()
+        if page is None:
             resposta.erro = "sessao nao aberta"
             return resposta
 
-        page = self._page
         try:
+            # O hCaptcha so monta o widget na guia em primeiro plano.
+            self._descartar_guias_extras()
+            page.bring_to_front()
             page.goto(config.URL_FORMULARIO, wait_until="domcontentloaded")
             page.fill("#Cnpj", cnpj)
             self._esperar_captcha_pronto(page)

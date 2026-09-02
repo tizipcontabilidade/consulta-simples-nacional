@@ -5,10 +5,23 @@
   <h1>Consultar CNPJs</h1>
   <p class="ajuda">
     Cole um CNPJ por linha (ou separados por virgula) e/ou envie um arquivo
-    <code>.txt</code>, <code>.csv</code> ou <code>.xlsx</code>. Pontuacao e ignorada.
+    <code>.txt</code>, <code>.csv</code> ou <code>.xlsx</code>. Pontuacao e ignorada,
+    e o CNPJ alfanumerico (com letras) e aceito. CPF e CAEPF nao sao consultaveis
+    no portal: aparecem listados no resultado, em "Nao entraram na consulta".
   </p>
 
   {% if aviso %}<div class="aviso erro">{{ aviso }}</div>{% endif %}
+
+  {% if descartados %}
+  <div class="aviso erro">
+    <strong>{{ descartados|length }} entrada(s) lida(s) que nao viraram consulta:</strong>
+    <ul class="legenda">
+      {% for descartado in descartados %}
+      <li><code>{{ descartado.bruto }}</code> &mdash; {{ descartado.motivo }}</li>
+      {% endfor %}
+    </ul>
+  </div>
+  {% endif %}
 
   <form method="post" action="{{ url_for('consultar') }}" enctype="multipart/form-data">
     <label for="cnpjs">CNPJs</label>

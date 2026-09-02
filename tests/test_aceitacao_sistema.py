@@ -73,7 +73,7 @@ def test_planilha_tem_resumo_completo_e_ocorrencias_filtradas(cliente):
     assert resposta.status_code == 200
 
     planilha = load_workbook(io.BytesIO(resposta.data))
-    assert planilha.sheetnames == ["Resumo", "Ocorrencias"]
+    assert planilha.sheetnames == ["Resumo", "Ocorrencias", "Nao consultados"]
 
     resumo = list(planilha["Resumo"].iter_rows(values_only=True))
     assert len(resumo) == 4                     # cabecalho + 3 CNPJs

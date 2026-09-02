@@ -62,14 +62,26 @@ class Consulta:
         return asdict(self)
 
 
+def normalizar_cnpj(cnpj: str) -> str:
+    """Os 14 caracteres uteis do CNPJ, em maiusculas.
+
+    Desde julho de 2026 o CNPJ e alfanumerico (IN RFB 2.229/2024): as 12
+    primeiras posicoes aceitam letras de A a Z alem dos digitos, e so os dois
+    digitos verificadores continuam obrigatoriamente numericos. A mascara nao
+    mudou. Minusculas sao aceitas na entrada e sobem para maiusculas.
+    """
+    return re.sub(r"[^0-9A-Za-z]", "", cnpj or "").upper()
+
+
 def formatar_cnpj(cnpj: str) -> str:
-    digitos = re.sub(r"\D", "", cnpj or "")
-    if len(digitos) != 14:
+    limpo = normalizar_cnpj(cnpj)
+    if len(limpo) != 14:
         return cnpj or ""
-    return f"{digitos[:2]}.{digitos[2:5]}.{digitos[5:8]}/{digitos[8:12]}-{digitos[12:]}"
+    return f"{limpo[:2]}.{limpo[2:5]}.{limpo[5:8]}/{limpo[8:12]}-{limpo[12:]}"
 
 
 def somente_digitos(cnpj: str) -> str:
+    """So os digitos - para CPF e CAEPF, que continuam puramente numericos."""
     return re.sub(r"\D", "", cnpj or "")
 
 
@@ -123,7 +135,7 @@ def _data_apos(texto: str) -> str:
 def analisar(html: str, cnpj_consultado: str = "") -> Consulta:
     """Converte o HTML da pagina de resultado em um objeto Consulta."""
     resultado = Consulta(
-        cnpj=somente_digitos(cnpj_consultado),
+        cnpj=normalizar_cnpj(cnpj_consultado),
         cnpj_formatado=formatar_cnpj(cnpj_consultado),
     )
     if not html:
@@ -149,13 +161,13 @@ def analisar(html: str, cnpj_consultado: str = "") -> Consulta:
 
     escondido = sopa.find("input", id="hdnCnpj")
     if escondido and escondido.get("value"):
-        resultado.cnpj = somente_digitos(escondido["value"])
+        resultado.cnpj = normalizar_cnpj(escondido["value"])
         resultado.cnpj_formatado = formatar_cnpj(resultado.cnpj)
 
     valores = identificacao.find_all("span", class_="spanValorVerde")
     if valores:
         if not resultado.cnpj:
-            resultado.cnpj = somente_digitos(_texto(valores[0]))
+            resultado.cnpj = normalizar_cnpj(_texto(valores[0]))
             resultado.cnpj_formatado = formatar_cnpj(resultado.cnpj)
         if len(valores) > 1:
             resultado.nome_empresarial = _texto(valores[-1])
