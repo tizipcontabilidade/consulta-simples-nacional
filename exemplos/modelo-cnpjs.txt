@@ -1,0 +1,9 @@
+# Modelo de lista para o agendamento diario.
+# Um CNPJ por linha; pontuacao e ignorada e linhas de comentario tambem.
+# Aponte o agendamento para a SUA lista - nao edite este arquivo, ele e
+# substituido a cada atualizacao do sistema.
+#
+# Os CNPJs abaixo sao ficticios, so para o formato ficar claro:
+12.345.678/0001-95
+01.234.567/0001-95
+12.ABC.345/01DE-35

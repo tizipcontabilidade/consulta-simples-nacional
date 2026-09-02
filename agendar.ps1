@@ -4,7 +4,7 @@
     em lote sozinha, todo dia, e avisar so o que mudou.
 
 .EXAMPLE
-    .\agendar.ps1 -Arquivo "D:\SN\clientes.txt" -Hora 08:00
+    .\agendar.ps1 -Arquivo "C:\ListasCNPJ\minha-carteira.txt" -Hora 08:00
 
 .EXAMPLE
     .\agendar.ps1 -Arquivo "\\servidor\contabil\clientes.xlsx" -Hora 07:30 -Nome "SN - carteira toda"

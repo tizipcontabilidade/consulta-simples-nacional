@@ -108,7 +108,7 @@ consulta e outra há uma pausa aleatória de 4 a 8 segundos.
 Mesmo motor da interface, para automação:
 
 ```bash
-consultar.exe --arquivo clientes.txt --formato xlsx
+consultar.exe --arquivo minha-carteira.txt --formato xlsx
 ```
 
 O `consultar.exe` (com console, instalado ao lado do principal) é a versão de

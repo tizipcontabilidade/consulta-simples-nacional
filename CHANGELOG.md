@@ -2,6 +2,39 @@
 
 O formato segue [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/).
 
+## [1.2.0] — 2026-09-02
+
+### Corrigido
+
+- **O sistema se matava sozinho ao fim de um lote longo, levando o resultado
+  junto.** O navegador estrangula temporizadores de aba em segundo plano para uma
+  batida por minuto, mas a tolerância do sinal de vida era de 30 segundos. Enquanto
+  o lote rodava, a proteção de "lote ativo" segurava o encerramento; no instante
+  em que terminava, o vigia derrubava o processo — e os downloads davam "não é
+  possível acessar o site" porque não havia mais servidor. Custou um lote de 1.179
+  CNPJs e mais de duas horas de consulta. Agora: tolerância de 5 minutos, sinal
+  imediato quando a aba volta ao primeiro plano, e **o relatório é gravado em
+  disco assim que o lote termina**, antes de qualquer clique. Resultado de horas
+  não pode depender de o processo continuar vivo.
+- **CNPJ real de cliente saía no arquivo de exemplo instalado.** Versões até a
+  1.1.0 publicavam `exemplos\clientes.txt` com um CNPJ real usado como exemplo, e
+  o arquivo ficava nas máquinas porque era instalado com `onlyifdoesntexist`. O
+  exemplo passa a ser `exemplos\modelo-cnpjs.txt`, só com CNPJs fictícios e
+  sempre substituído. O instalador remove o arquivo antigo das máquinas — e, se
+  alguém tiver trocado o conteúdo pela própria lista, apenas o renomeia, para
+  ninguém perder trabalho.
+
+### Melhorado
+
+- **Resultado com filtro por situação.** Lote grande numa página só virava uma
+  rolagem inutilizável — 1.179 CNPJs geravam quase 1 MB de HTML. A tela agora
+  mostra um grupo por vez, com botões contando cada situação: MUDOU, ERRO,
+  ALERTA, NÃO OPTANTE, ATENÇÃO, EM DIA e NÃO CONSULTADOS. Abre no grupo mais
+  grave que tenha algo, porque quem chega no resultado quer ver o que precisa de
+  ação.
+- **Identidade visual.** A logo passa a ser o ícone dos executáveis, do
+  instalador, dos atalhos e da interface.
+
 ## [1.1.0] — 2026-09-02
 
 Numerada como *minor* e não *patch*: além das correções, a versão traz

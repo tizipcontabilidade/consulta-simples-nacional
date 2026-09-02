@@ -46,7 +46,11 @@ _trava = threading.Lock()
 _ultimo_sinal = time.monotonic()
 _encerrando = False
 INTERVALO_SINAL = 5                            # ritmo da verificacao
-TOLERANCIA_SINAL = config.TOLERANCIA_SINAL     # silencio maior = ninguem olhando
+# O navegador estrangula temporizadores de aba em segundo plano para uma batida
+# por minuto. Com tolerancia de 30s o sistema se matava sozinho assim que o lote
+# terminava e a protecao de "lote ativo" caia - levando junto o resultado de
+# horas de consulta. A tolerancia precisa folgar bem acima de um minuto.
+TOLERANCIA_SINAL = config.TOLERANCIA_SINAL
 
 
 # Manifesto de versao relido de tempos em tempos. E leitura de arquivo local
@@ -136,6 +140,28 @@ def _cnpjs_do_pedido() -> lote.Leitura:
     return leitura
 
 
+def _gravar_relatorio(execucao) -> str:
+    """Grava o relatorio em disco assim que o lote termina.
+
+    Um lote grande leva horas. Deixar o resultado so na memoria significa que
+    qualquer encerramento do processo joga fora o trabalho todo - foi o que
+    aconteceu com um lote de 1.179 CNPJs. O arquivo fica gravado antes de
+    qualquer clique, e a tela apenas o oferece.
+    """
+    try:
+        config.PASTA_SAIDA.mkdir(parents=True, exist_ok=True)
+        itens = [i.como_dicionario() for i in execucao.resultados_ordenados()]
+        descartados = [d.como_dicionario() for d in execucao.descartados]
+        carimbo = execucao.inicio.strftime("%Y%m%d-%H%M%S")
+        caminho = config.PASTA_SAIDA / f"simples-nacional-{carimbo}.xlsx"
+        exportar.gerar_excel(itens, caminho, descartados)
+        execucao.relatorio = caminho.name
+        return caminho.name
+    except Exception as erro:  # disco cheio, arquivo aberto no Excel, etc.
+        execucao.mensagem = f"{execucao.mensagem} (falha ao gravar o relatorio: {erro})"
+        return ""
+
+
 # ---------------------------------------------------------------------- rotas
 @app.get("/")
 def inicio():
@@ -170,6 +196,7 @@ def consultar():
                 visivel=visivel,
                 salvar_comprovante_em_dia=todos_comprovantes,
             )
+            _gravar_relatorio(execucao)
 
         _thread = threading.Thread(target=rodar, daemon=True)
         _thread.start()
@@ -199,24 +226,56 @@ def cancelar():
     return redirect(url_for("andamento"))
 
 
+# Grupos da tela de resultado. Lote grande (mais de mil CNPJs) numa pagina so
+# vira uma rolagem inutilizavel, entao a tela mostra um grupo por vez.
+GRUPO_MUDOU = "MUDOU"
+GRUPO_DESCARTADOS = "NAO CONSULTADOS"
+
+
+def _agrupar(itens: list, descartados: list) -> list:
+    """Grupos na ordem em que merecem atencao, cada um com sua contagem."""
+    por_status = {}
+    for item in itens:
+        por_status.setdefault(item.get("status", ""), []).append(item)
+
+    grupos = [
+        {"chave": estado, "rotulo": estado, "itens": por_status.get(estado, [])}
+        for estado in sorted(por_status, key=lambda e: ORDEM.get(e, 99))
+    ]
+    mudaram = [i for i in itens if i.get("situacao_historico") == historico.MUDOU]
+    if mudaram:
+        grupos.insert(0, {"chave": GRUPO_MUDOU, "rotulo": "MUDOU", "itens": mudaram})
+    if descartados:
+        grupos.append(
+            {"chave": GRUPO_DESCARTADOS, "rotulo": GRUPO_DESCARTADOS, "itens": descartados}
+        )
+    return [g for g in grupos if g["itens"]]
+
+
 @app.get("/resultado")
 def resultado():
     if _atual is None:
         return redirect(url_for("inicio"))
 
     itens = [i.como_dicionario() for i in _atual.resultados_ordenados()]
-    com_ocorrencia = [i for i in itens if i.get("status") != EM_DIA]
-    em_dia = [i for i in itens if i.get("status") == EM_DIA]
-    mudaram = [i for i in itens if i.get("situacao_historico") == historico.MUDOU]
+    descartados = [d.como_dicionario() for d in _atual.descartados]
+    grupos = _agrupar(itens, descartados)
+
+    # Abre no grupo mais urgente que tenha algo. Quem chega no resultado quer
+    # ver o que precisa de acao, nao os 592 CNPJs que estao em dia.
+    escolhido = request.args.get("grupo") or (grupos[0]["chave"] if grupos else "")
+    atual_grupo = next((g for g in grupos if g["chave"] == escolhido), None)
+
     return render_template(
         "resultado.html",
         execucao=_atual,
-        com_ocorrencia=com_ocorrencia,
-        em_dia=em_dia,
-        mudaram=mudaram,
+        grupos=grupos,
+        grupo=atual_grupo,
         rotulos=ROTULOS,
         ordem=ORDEM,
-        descartados=_atual.descartados,
+        em_dia_chave=EM_DIA,
+        descartados_chave=GRUPO_DESCARTADOS,
+        mudou_chave=GRUPO_MUDOU,
     )
 
 

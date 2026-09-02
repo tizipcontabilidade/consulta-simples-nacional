@@ -24,7 +24,7 @@ if errorlevel 1 exit /b 1
 echo.
 echo Pronto.
 echo   Interface web ....... .venv\Scripts\python.exe app.py
-echo   Linha de comando .... .venv\Scripts\python.exe consultar.py --arquivo exemplos\clientes.txt
+echo   Linha de comando .... .venv\Scripts\python.exe consultar.py --arquivo exemplos\modelo-cnpjs.txt
 echo   Gerar instalador .... powershell -ExecutionPolicy Bypass -File construir.ps1
 echo.
 endlocal

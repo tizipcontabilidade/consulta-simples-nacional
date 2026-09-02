@@ -273,6 +273,8 @@ class Execucao:
     concluido: bool = False
     cancelado: bool = False
     erro_fatal: str = ""
+    # Nome do relatorio gravado em disco quando o lote terminou.
+    relatorio: str = ""
     inicio: datetime = field(default_factory=datetime.now)
     fim: Optional[datetime] = None
     _trava: threading.Lock = field(default_factory=threading.Lock, repr=False)
@@ -312,6 +314,7 @@ class Execucao:
             "concluido": self.concluido,
             "cancelado": self.cancelado,
             "erro_fatal": self.erro_fatal,
+            "relatorio": self.relatorio,
             "contagem": self.contagem(),
             "com_mudanca": len(self.com_mudanca()),
             "descartados": [d.como_dicionario() for d in self.descartados],

@@ -86,10 +86,14 @@ def test_traz_as_demais_informacoes_do_cnpj(cliente):
 def test_cnpj_em_dia_aparece_so_no_resumo(cliente):
     _rodar(cliente, f"{fixturas.CNPJ_EM_DIA}\n{fixturas.CNPJ_COM_EVENTOS}")
 
-    pagina = cliente.get("/resultado").get_data(as_text=True)
-    corpo_ocorrencias = pagina.split("Ocorrencias")[1].split("Em dia")[0]
-    assert "11.444.777/0001-61" not in corpo_ocorrencias
-    assert "11.444.777/0001-61" in pagina.split("Em dia")[1]
+    # O grupo de ocorrencias nao traz quem esta em dia; o grupo EM DIA traz,
+    # e so como linha de resumo.
+    ocorrencias = cliente.get("/resultado?grupo=ALERTA").get_data(as_text=True)
+    assert "11.444.777/0001-61" not in ocorrencias
+
+    em_dia = cliente.get("/resultado?grupo=EM+DIA").get_data(as_text=True)
+    assert "11.444.777/0001-61" in em_dia
+    assert "Eventos futuros" not in em_dia, "em dia nao ganha detalhamento"
 
     planilha = load_workbook(io.BytesIO(cliente.get("/baixar/xlsx").data))
     resumo = [linha[0] for linha in planilha["Resumo"].iter_rows(min_row=2, values_only=True)]
@@ -137,9 +141,10 @@ def test_tela_de_resultado_destaca_o_que_mudou(cliente):
     historico.gravar(estado)
 
     _rodar(cliente, fixturas.CNPJ_COM_EVENTOS)
+    # O que mudou vira o primeiro filtro da tela, e e nele que ela abre.
     pagina = cliente.get("/resultado").get_data(as_text=True)
 
-    assert "Mudou desde a ultima consulta" in pagina
+    assert "grupo=MUDOU" in pagina
     assert "Situacao no Simples Nacional" in pagina
 
 

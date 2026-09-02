@@ -4,12 +4,14 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block titulo %}Consulta Simples Nacional{% endblock %}</title>
+  <link rel="icon" href="{{ url_for('static', filename='logo.png') }}" type="image/png">
   <link rel="stylesheet" href="{{ url_for('static', filename='estilo.css') }}">
 </head>
 <body>
   <header>
     <a class="marca" href="{{ url_for('inicio') }}">
-      <span class="ponto"></span> Consulta Simples Nacional
+      <img class="logo" src="{{ url_for('static', filename='logo.png') }}"
+           alt="" width="28" height="28"> Consulta Simples Nacional
     </a>
     <span class="sub">Optantes &middot; desenquadramento &middot; eventos futuros</span>
     {% block encerrar %}
@@ -61,6 +63,14 @@
       fetch("{{ url_for('sinal') }}", { method: "POST", keepalive: true }).catch(() => {});
     avisarQueEstouAqui();
     setInterval(avisarQueEstouAqui, 5000);
+
+    // O navegador estrangula o temporizador quando a aba vai para segundo plano
+    // (uma batida por minuto). Ao voltar para a frente, avisa na hora em vez de
+    // esperar o proximo tique - o sistema ja tolera o intervalo estrangulado,
+    // isto so encurta a janela de silencio.
+    document.addEventListener("visibilitychange", () => {
+      if (!document.hidden) avisarQueEstouAqui();
+    });
   </script>
   {% endblock %}
 </body>

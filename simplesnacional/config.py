@@ -101,7 +101,7 @@ TIMEOUT_DOWNLOAD = int(os.environ.get("CSN_TIMEOUT_DOWNLOAD", 120))
 
 # Segundos sem sinal de vida da interface antes de o sistema se encerrar
 # sozinho (aba fechada, navegador fechado). Nunca encerra durante um lote.
-TOLERANCIA_SINAL = int(os.environ.get("CSN_TOLERANCIA_SINAL", 30))
+TOLERANCIA_SINAL = int(os.environ.get("CSN_TOLERANCIA_SINAL", 300))
 
 
 def preparar_pastas() -> None:

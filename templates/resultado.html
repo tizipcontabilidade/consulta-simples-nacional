@@ -6,6 +6,10 @@
   <span class="tag {{ classe }}">{{ status }}</span>
 {%- endmacro %}
 
+{% macro classe_do_grupo(chave) -%}
+  {{- {'ALERTA':'alerta','NAO OPTANTE':'naooptante','ATENCAO':'atencao','EM DIA':'emdia','ERRO':'erro','MUDOU':'mudou','NAO CONSULTADOS':'descartado'}.get(chave,'') -}}
+{%- endmacro %}
+
 {% block conteudo %}
 <section class="cartao">
   <div class="cabecalho-resultado">
@@ -19,19 +23,35 @@
   </div>
 
   <p class="contadores">
-    {{ execucao.total }} CNPJ(s) processado(s) &middot;
-    {{ com_ocorrencia|length }} com ocorrencia &middot;
-    {{ em_dia|length }} em dia &middot;
-    {{ mudaram|length }} com mudanca desde a ultima consulta
+    {{ execucao.total }} CNPJ(s) processado(s)
     {% if execucao.cancelado %} &middot; <strong>lote cancelado</strong>{% endif %}
-    {% if descartados %} &middot;
-    <strong>{{ descartados|length }} entrada(s) nao consultada(s)</strong>{% endif %}
+    {% if execucao.relatorio %}
+    &middot; relatorio ja gravado em <code>{{ execucao.relatorio }}</code>
+    {% endif %}
   </p>
+
+  {# Um grupo por vez: lote de mil CNPJs numa pagina so vira rolagem inutil. #}
+  <nav class="filtros" aria-label="Filtrar por situacao">
+    {% for g in grupos %}
+    <a class="filtro {{ classe_do_grupo(g.chave) }} {% if grupo and g.chave == grupo.chave %}ativo{% endif %}"
+       href="{{ url_for('resultado', grupo=g.chave) }}">
+      {{ g.rotulo }} <span class="quantos">{{ g.itens|length }}</span>
+    </a>
+    {% endfor %}
+  </nav>
 </section>
 
-{% if descartados %}
-<section class="cartao destaque">
-  <h2>Nao entraram na consulta <span class="ajuda">({{ descartados|length }})</span></h2>
+{% if not grupo %}
+<section class="cartao">
+  <p class="ajuda">Nenhum CNPJ consultado neste lote.</p>
+</section>
+{% else %}
+
+<section class="cartao {% if grupo.chave in (mudou_chave, descartados_chave) %}destaque{% endif %}">
+  <h2>{{ grupo.rotulo }} <span class="ajuda">({{ grupo.itens|length }})</span></h2>
+
+  {# ---------------------------------------------------- nao consultados #}
+  {% if grupo.chave == descartados_chave %}
   <p class="ajuda">
     Lidas do arquivo ou da lista colada, mas nao consultadas. Confira uma a uma:
     aqui e onde um cliente sumiria do lote sem ninguem perceber.
@@ -39,19 +59,16 @@
   <table class="compacta">
     <thead><tr><th>Como veio</th><th>Por que ficou de fora</th></tr></thead>
     <tbody>
-      {% for descartado in descartados %}
+      {% for descartado in grupo.itens %}
       <tr><td>{{ descartado.bruto }}</td><td>{{ descartado.motivo }}</td></tr>
       {% endfor %}
     </tbody>
   </table>
-</section>
-{% endif %}
 
-{% if mudaram %}
-<section class="cartao destaque">
-  <h2>Mudou desde a ultima consulta</h2>
+  {# --------------------------------------------------------------- mudou #}
+  {% elif grupo.chave == mudou_chave %}
   <p class="ajuda">Comparacao com o retrato guardado na rodada anterior de cada CNPJ.</p>
-  {% for item in mudaram %}
+  {% for item in grupo.itens %}
   <article class="mudanca">
     <header>
       {{ etiqueta(item.status) }}
@@ -65,16 +82,27 @@
     </ul>
   </article>
   {% endfor %}
-</section>
-{% endif %}
 
-<section class="cartao">
-  <h2>Ocorrencias</h2>
-  {% if not com_ocorrencia %}
-    <p class="ajuda">Nenhuma ocorrencia. Todos os CNPJs consultados estao em dia.</p>
-  {% endif %}
+  {# -------------------------------------------------------------- em dia #}
+  {% elif grupo.chave == em_dia_chave %}
+  <p class="ajuda">Sem detalhamento, conforme combinado — optantes sem evento futuro e sem historico de saida.</p>
+  <table class="compacta">
+    <thead><tr><th>CNPJ</th><th>Nome empresarial</th><th>Optante desde</th></tr></thead>
+    <tbody>
+      {% for item in grupo.itens %}
+      <tr>
+        <td>{{ item.cnpj_formatado }}</td>
+        <td>{{ item.nome_empresarial }}</td>
+        <td>{{ item.optante_desde }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
 
-  {% for item in com_ocorrencia %}
+  {# ------------------------------------------ alerta, atencao, nao optante, erro #}
+  {% else %}
+  {% if rotulos.get(grupo.chave) %}<p class="ajuda">{{ rotulos[grupo.chave] }}</p>{% endif %}
+  {% for item in grupo.itens %}
   <article class="ocorrencia">
     <header>
       {{ etiqueta(item.status) }}
@@ -133,24 +161,7 @@
     <footer class="consultado">Consultado em {{ item.data_consulta or '—' }}</footer>
   </article>
   {% endfor %}
-</section>
-
-<section class="cartao">
-  <h2>Em dia <span class="ajuda">({{ em_dia|length }})</span></h2>
-  <p class="ajuda">Sem detalhamento, conforme combinado — optantes sem evento futuro e sem historico de saida.</p>
-  {% if em_dia %}
-  <table class="compacta">
-    <thead><tr><th>CNPJ</th><th>Nome empresarial</th><th>Optante desde</th></tr></thead>
-    <tbody>
-      {% for item in em_dia %}
-      <tr>
-        <td>{{ item.cnpj_formatado }}</td>
-        <td>{{ item.nome_empresarial }}</td>
-        <td>{{ item.optante_desde }}</td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
   {% endif %}
 </section>
+{% endif %}
 {% endblock %}

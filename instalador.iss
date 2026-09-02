@@ -5,7 +5,7 @@
 ; A versao vem do construir.ps1, que a le de simplesnacionalersao.py.
 ; O valor abaixo e so uma rede de seguranca para compilar o .iss na mao.
 #ifndef Versao
-  #define Versao "1.1.0"
+  #define Versao "1.2.0"
 #endif
 #define Publicador "Zip Contabilidade"
 #define Executavel "ConsultaSimplesNacional.exe"
@@ -30,6 +30,7 @@ PrivilegesRequiredOverridesAllowed=dialog
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 UninstallDisplayIcon={app}\{#Executavel}
+SetupIconFile=static\logo.ico
 LicenseFile=LICENSE
 InfoBeforeFile=
 
@@ -43,7 +44,9 @@ Name: "atalhodesktop"; Description: "Criar atalho na area de trabalho"; GroupDes
 Source: "dist\ConsultaSimplesNacional\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "agendar.ps1"; DestDir: "{app}"; Flags: ignoreversion
 Source: "README.md"; DestDir: "{app}"; Flags: ignoreversion
-Source: "exemplos\clientes.txt"; DestDir: "{app}\exemplos"; Flags: ignoreversion onlyifdoesntexist
+; O modelo e substituido a cada atualizacao: e exemplo do sistema, nao dado
+; de ninguem. Quem agenda aponta para a propria lista, fora da instalacao.
+Source: "exemplos\modelo-cnpjs.txt"; DestDir: "{app}\exemplos"; Flags: ignoreversion
 
 [Icons]
 Name: "{group}\{#Nome}"; Filename: "{app}\{#Executavel}"
@@ -87,4 +90,36 @@ begin
       'Nacional exige verificacao (captcha) em janela visivel.' + #13#10#13#10 +
       'Deseja instalar mesmo assim?',
       mbConfirmation, MB_YESNO) = IDYES;
+end;
+
+[Code]
+// Versoes ate a 1.1.0 publicavam exemplos\clientes.txt com um CNPJ real usado
+// como exemplo. O arquivo ficava para tras nas maquinas porque era instalado
+// com onlyifdoesntexist. Aqui ele e removido - mas so quando ainda contem o
+// exemplo publicado por nos: se alguem trocou o conteudo pela propria lista,
+// o arquivo e preservado e apenas renomeado, para ninguem perder trabalho.
+procedure LimparExemploAntigo();
+var
+  Caminho, Conteudo: string;
+begin
+  Caminho := ExpandConstant('{app}\exemplos\clientes.txt');
+  if not FileExists(Caminho) then
+    Exit;
+
+  if not LoadStringFromFile(Caminho, Conteudo) then
+    Exit;
+
+  if Pos('00.000.000', Conteudo) > 0 then
+  begin
+    if Length(Conteudo) < 200 then
+      DeleteFile(Caminho)                                   // e o exemplo intacto
+    else
+      RenameFile(Caminho, Caminho + '.anterior');           // alguem mexeu: guarda
+  end;
+end;
+
+procedure CurStepChanged(CurStep: TSetupStep);
+begin
+  if CurStep = ssPostInstall then
+    LimparExemploAntigo();
 end;

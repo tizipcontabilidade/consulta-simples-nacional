@@ -51,7 +51,7 @@ janela = EXE(
     name="ConsultaSimplesNacional",
     console=False,
     disable_windowed_traceback=False,
-    icon=None,
+    icon='static/logo.ico',
 )
 
 # Linha de comando: com console, para o Agendador de Tarefas e para scripts.
@@ -63,7 +63,7 @@ terminal = EXE(
     name="consultar",
     console=True,
     disable_windowed_traceback=False,
-    icon=None,
+    icon='static/logo.ico',
 )
 
 COLLECT(

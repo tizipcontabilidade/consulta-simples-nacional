@@ -143,3 +143,34 @@ body > header .encerrar button:hover { background: #2b6b31; color: #fff; }
 .aviso.atualizacao .notas { display: block; color: var(--tinta-suave); margin-top: 4px; }
 .aviso.atualizacao form { margin: 0; }
 .versao { display: block; margin-top: 8px; opacity: .7; font-size: .8rem; }
+
+/* Filtros do resultado: um grupo por vez, porque lote grande numa pagina so
+   vira rolagem inutilizavel. */
+.filtros { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+.filtro {
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 7px 13px; border-radius: 999px; text-decoration: none;
+  font-size: .82rem; font-weight: 600; letter-spacing: .02em;
+  border: 1px solid var(--borda); background: #fff; color: var(--tinta);
+  transition: transform .08s ease, box-shadow .15s ease;
+}
+.filtro:hover { transform: translateY(-1px); box-shadow: 0 2px 6px rgba(0,0,0,.08); }
+.filtro .quantos {
+  background: rgba(0,0,0,.07); border-radius: 999px;
+  padding: 1px 8px; font-variant-numeric: tabular-nums;
+}
+.filtro.ativo { box-shadow: inset 0 0 0 2px var(--tinta); }
+
+.filtro.alerta     { background: #f4b6b6; color: #6d1414; border-color: #e59a9a; }
+.filtro.naooptante { background: #fde9a9; color: #6b4e00; border-color: #f0d98c; }
+.filtro.atencao    { background: #fff2cc; color: #6b5300; border-color: #f0e0a8; }
+.filtro.emdia      { background: var(--verde-claro); color: #1f5c24; border-color: #b7ddb9; }
+.filtro.erro       { background: #f8cbad; color: #7a2e00; border-color: #eab393; }
+.filtro.mudou      { background: #ffe6cc; color: #7a4400; border-color: #f0c99a; }
+.filtro.descartado { background: #e6ecf5; color: #2b4468; border-color: #c3d1e4; }
+.filtro.ativo .quantos { background: rgba(0,0,0,.14); }
+
+.marca .logo {
+  width: 28px; height: 28px; border-radius: 6px;
+  vertical-align: middle; margin-right: 4px;
+}

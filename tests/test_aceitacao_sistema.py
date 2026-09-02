@@ -50,21 +50,41 @@ def test_fluxo_completo_pela_interface(cliente):
     assert estado["processados"] == 3
     assert estado["contagem"] == {ALERTA: 1, NAO_OPTANTE: 1, EM_DIA: 1}
 
+    # A tela abre no grupo mais grave que tenha algo: quem chega no resultado
+    # quer ver o que precisa de acao, nao a lista dos que estao em dia.
     pagina = cliente.get("/resultado").get_data(as_text=True)
     assert "11.222.333/0001-81" in pagina
     assert "MARCENARIA MODELO LTDA" in pagina
     assert "Exclusão de Ofício - Débitos" in pagina
     assert "01/01/2027" in pagina
-    assert "PADARIA EXEMPLO ME" in pagina
+
+    # Os demais grupos ficam a um clique, com a contagem no proprio botao.
+    for grupo in (ALERTA, NAO_OPTANTE, EM_DIA):
+        assert f"grupo={grupo.replace(' ', '+')}" in pagina
+
+    em_dia = cliente.get(f"/resultado?grupo={EM_DIA}").get_data(as_text=True)
+    assert "PADARIA EXEMPLO ME" in em_dia
 
 
-def test_ordem_do_resultado_e_por_gravidade(cliente):
+def test_ordem_dos_grupos_e_por_gravidade(cliente):
+    """Os botoes de filtro seguem a gravidade, e a tela abre no primeiro."""
     _rodar(cliente, TRES_CNPJS)
     pagina = cliente.get("/resultado").get_data(as_text=True)
 
-    posicao_alerta = pagina.index("11.222.333/0001-81")
-    posicao_nao_optante = pagina.index("00.000.000/0001-91")
-    assert posicao_alerta < posicao_nao_optante
+    posicoes = [pagina.index(f"grupo={g.replace(' ', '+')}") for g in (ALERTA, NAO_OPTANTE, EM_DIA)]
+    assert posicoes == sorted(posicoes)
+    assert "11.222.333/0001-81" in pagina, "abre no grupo mais grave"
+
+
+def test_um_grupo_por_vez_para_lote_grande(cliente):
+    """O motivo do filtro existir: mil CNPJs numa pagina so era inutilizavel."""
+    _rodar(cliente, TRES_CNPJS)
+
+    alerta = cliente.get(f"/resultado?grupo={ALERTA}").get_data(as_text=True)
+
+    assert "11.222.333/0001-81" in alerta
+    assert "PADARIA EXEMPLO ME" not in alerta, "o grupo em dia nao entra aqui"
+    assert "00.000.000/0001-91" not in alerta
 
 
 def test_planilha_tem_resumo_completo_e_ocorrencias_filtradas(cliente):
